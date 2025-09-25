@@ -2,4 +2,3 @@ numpy
 matplotlib
 torch
 tqdm
-rich
