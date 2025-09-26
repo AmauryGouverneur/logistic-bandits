@@ -1,4 +1,3 @@
-# mh_sphere.py
 import torch
 
 class MHSphereSampler:
@@ -16,29 +15,22 @@ class MHSphereSampler:
     # ----------------- utilities -----------------
     def sample_uniform_sphere(self):
         x = torch.randn(self.d, device=self.device, dtype=self.dtype)
-        return x / x.norm()
+        return x / x.norm().clamp_min(1e-12)
 
     def sample_uniform_sphere_batch(self, K):
         x = torch.randn(K, self.d, device=self.device, dtype=self.dtype)
-        return x / x.norm(dim=1, keepdim=True)
+        return x / x.norm(dim=1, keepdim=True).clamp_min(1e-12)
 
     def _householder_apply_batch(self, mu, x):
-        """
-        Apply Householder that maps e1 -> mu to each row of x.
-        mu: (K,d) unit, x: (K,d)
-        returns H(mu) @ x, where H = I - 2 v v^T, v = (e1 - mu)/||e1 - mu||
-        """
         K, d = mu.shape
         device, dtype = mu.device, mu.dtype
         e1 = torch.zeros(K, d, device=device, dtype=dtype)
         e1[:, 0] = 1.0
         v = e1 - mu                               # (K,d)
-        nv = v.norm(dim=1, keepdim=True)          # (K,1)
-        v_unit = v / nv.clamp_min(1e-12)          # avoid div by 0
-        # Hx = x - 2 (v_unit^T x) v_unit
-        proj = (x * v_unit).sum(dim=1, keepdim=True)  # (K,1)
+        nv = v.norm(dim=1, keepdim=True)
+        v_unit = v / nv.clamp_min(1e-12)
+        proj = (x * v_unit).sum(dim=1, keepdim=True)
         y = x - 2.0 * proj * v_unit
-        # For rows where mu==e1 (nv≈0), H=I → return x
         mask = (nv.squeeze(1) <= 1e-12)
         if mask.any():
             y[mask] = x[mask]
@@ -51,7 +43,7 @@ class MHSphereSampler:
         kappa_t = torch.as_tensor(self.kappa, device=device, dtype=dtype)
         if float(kappa_t) < 1e-8:
             x = torch.randn(d, device=device, dtype=dtype)
-            return x / x.norm()
+            return x / x.norm().clamp_min(1e-12)
 
         one = torch.ones((), device=device, dtype=dtype)
         dm1 = torch.as_tensor(d - 1, device=device, dtype=dtype)
@@ -69,9 +61,8 @@ class MHSphereSampler:
                 break
 
         v = torch.randn(d - 1, device=device, dtype=dtype)
-        v = v / v.norm()
+        v = v / v.norm().clamp_min(1e-12)
         theta_e1 = torch.cat((w.view(1), torch.sqrt(torch.clamp(one - w * w, min=0.0)) * v))
-        # Householder: e1 -> mu
         e1 = torch.zeros(d, device=device, dtype=dtype); e1[0] = 1.0
         vH = e1 - mu
         nv = vH.norm()
@@ -82,17 +73,13 @@ class MHSphereSampler:
 
     # ----------------- batched vMF -----------------
     def _vmf_sample_batch(self, mu):
-        """
-        Batched vMF samples: theta' ~ vMF(mu_k, kappa) for each row k.
-        mu: (K,d), returns (K,d).
-        """
         K, d = mu.shape
         device, dtype = mu.device, mu.dtype
         kappa_t = torch.as_tensor(self.kappa, device=device, dtype=dtype)
 
         if float(kappa_t) < 1e-8:
             x = torch.randn(K, d, device=device, dtype=dtype)
-            return x / x.norm(dim=1, keepdim=True)
+            return x / x.norm(dim=1, keepdim=True).clamp_min(1e-12)
 
         one = torch.ones((), device=device, dtype=dtype)
         dm1 = torch.as_tensor(d - 1, device=device, dtype=dtype)
@@ -100,7 +87,6 @@ class MHSphereSampler:
         xparam = (one - b) / (one + b)
         c = kappa_t * xparam + dm1 * torch.log1p(-(xparam * xparam))
 
-        # sample w via rejection for each chain
         beta_dist = torch.distributions.Beta(dm1 / 2.0, dm1 / 2.0)
         w = torch.empty(K, device=device, dtype=dtype)
         filled = torch.zeros(K, dtype=torch.bool, device=device)
@@ -116,22 +102,17 @@ class MHSphereSampler:
                 w[idx] = w_try[acc]
                 filled[idx] = True
 
-        # tangent directions on S^{d-2}
         v = torch.randn(K, d - 1, device=device, dtype=dtype)
-        v = v / v.norm(dim=1, keepdim=True)
+        v = v / v.norm(dim=1, keepdim=True).clamp_min(1e-12)
         sqrt_part = torch.sqrt(torch.clamp(1.0 - w * w, min=0.0)).unsqueeze(1)
-        theta_e1 = torch.cat([w.unsqueeze(1), sqrt_part * v], dim=1)  # (K,d)
-
-        # rotate e1 -> mu via batched Householder
-        theta = self._householder_apply_batch(mu, theta_e1)           # (K,d)
-        # ensure unit (numerical safety)
-        return theta / theta.norm(dim=1, keepdim=True)
+        theta_e1 = torch.cat([w.unsqueeze(1), sqrt_part * v], dim=1)
+        theta = self._householder_apply_batch(mu, theta_e1)
+        return theta / theta.norm(dim=1, keepdim=True).clamp_min(1e-12)
 
     # ----------------- MH steps -----------------
     def step(self, theta, logp_fn, n_steps=100):
-        """ Single-chain MH (as before). """
         theta = theta.to(self.device, self.dtype)
-        theta = theta / theta.norm()
+        theta = theta / theta.norm().clamp_min(1e-12)
         logp = logp_fn(theta)
         for _ in range(n_steps):
             prop = self._vmf_sample(theta)
@@ -140,16 +121,18 @@ class MHSphereSampler:
                 theta, logp = prop, logp_prop
         return theta, logp
 
-    def step_batch(self, theta_batch, logp_fn_batch, n_steps=50):
+    def step_batch(self, theta_batch, logp_fn_batch, n_steps=50, return_accept_mask=False):
         """
         Batched MH for K chains.
         theta_batch: (K,d) unit vectors
         logp_fn_batch: callable((K,d)) -> (K,) log posterior
+        If return_accept_mask=True, also returns a boolean mask of accepted proposals across all steps.
         """
         theta = theta_batch.to(self.device, self.dtype)
-        theta = theta / theta.norm(dim=1, keepdim=True)
+        theta = theta / theta.norm(dim=1, keepdim=True).clamp_min(1e-12)
         logp = logp_fn_batch(theta)  # (K,)
         K = theta.shape[0]
+        any_accept = torch.zeros(K, dtype=torch.bool, device=self.device)
         for _ in range(n_steps):
             prop = self._vmf_sample_batch(theta)       # (K,d)
             logp_prop = logp_fn_batch(prop)            # (K,)
@@ -158,22 +141,7 @@ class MHSphereSampler:
             if accept.any():
                 theta[accept] = prop[accept]
                 logp[accept] = logp_prop[accept]
+                any_accept |= accept
+        if return_accept_mask:
+            return theta, logp, any_accept
         return theta, logp
-
-    # (optional) keep tune_kappa for CPU use; skip it on GPU for speed
-    def tune_kappa(self, current_theta, logp_fn, target_accept=(0.2, 0.4), probe_steps=200):
-        accepted = 0
-        theta = current_theta.clone().to(self.device, self.dtype)
-        logp = logp_fn(theta)
-        for _ in range(probe_steps):
-            prop = self._vmf_sample(theta)
-            logp_prop = logp_fn(prop)
-            if torch.log(torch.rand((), device=self.device, dtype=self.dtype)) < (logp_prop - logp):
-                theta, logp = prop, logp_prop
-                accepted += 1
-        acc = accepted / probe_steps
-        if acc < target_accept[0]:
-            self.kappa *= 1.25
-        elif acc > target_accept[1]:
-            self.kappa *= 0.80
-        return acc, self.kappa

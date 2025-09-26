@@ -1,0 +1,12 @@
+# --- CPU-only torch ---
+--index-url https://download.pytorch.org/whl/cpu
+torch==2.8.*
+
+# --- OR: CUDA (closest widely distributed wheel is cu124) ---
+# --index-url https://download.pytorch.org/whl/cu124
+# torch==2.8.*
+
+# Common deps
+numpy
+matplotlib
+tqdm
