@@ -1,6 +1,6 @@
 # Logistic Bandits — Thompson Sampling with MH on the Sphere
 
-This repo contains an of Thompson Sampling for **logistic bandits** where both the action set and parameter set are the unit sphere $ \mathbb S^{d-1}$. Posterior sampling is done with Metropolis–Hastings (MH) random walks on the sphere using von Mises–Fisher. We consider a synthetic logistic bandit with dimension $d=10$, horizon $T=200$, and slope parameter $\beta\in[0.25,10]$. The action and parameter spaces are both the unit sphere, and the prior on $\Theta$ is uniform.
+This repo contains an of Thompson Sampling for **logistic bandits** where both the action set and parameter set are the unit sphere $S^{d-1}$. Posterior sampling is done with Metropolis–Hastings (MH) random walks on the sphere using von Mises–Fisher. We consider a synthetic logistic bandit with dimension $d=10$, horizon $T=200$, and slope parameter $\beta\in[0.25,10]$. The action and parameter spaces are both the unit sphere, and the prior on $\Theta$ is uniform.
 
 We use this implementation to compare our new regret bound against prior bounds (Dong & Van Roy, 2019; Russo & Van Roy, 2014).
 
@@ -53,9 +53,9 @@ logistic-bandits/
   Loads saved results and produces the four figures above. It also exports TikZ via `matplot2tikz`.
 - **`mh_sphere.py`**  
   Implements **MH on the sphere** with **vMF** random-walk proposals. We operate on shape $(B,K,d)$: $B$ experiments in parallel, each with $K$ chains, in $d$ dimensions. The proposal is
-  \[
+  $$
   \theta' \sim \mathrm{vMF}(\mu=\theta,\ \kappa),
-  \]
+  $$
   and we accept with $\min\{1, \exp(\log p(\theta') - \log p(\theta))\}$. The code runs entirely on CUDA when available.
 
 
