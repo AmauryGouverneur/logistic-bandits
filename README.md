@@ -1,14 +1,14 @@
-# Logistic Bandits — Thompson Sampling with MH on the Sphere
+# Thompson Sampling for Logistic Bandits
 
-This repo contains an of Thompson Sampling for **logistic bandits** where both the action set and parameter set are the unit sphere $S^{d-1}$. Posterior sampling is done with Metropolis–Hastings (MH) random walks on the sphere using von Mises–Fisher. We consider a synthetic logistic bandit with dimension $d=10$, horizon $T=200$, and slope parameter $\beta\in[0.25,10]$. The action and parameter spaces are both the unit sphere, and the prior on $\Theta$ is uniform.
+This repo contains an of Thompson Sampling for **logistic bandits** where both the action set and parameter set are the unit sphere $S^{d-1}$. Posterior sampling is done with Metropolis–Hastings (MH) random walks on the sphere using von Mises–Fisher. We consider a synthetic logistic bandit with dimension $d=10$, horizon $T=200$, and logistic slope parameter $\beta\in[0.25,10]$. The action and parameter spaces are both the unit sphere, and the prior on $\Theta$ is uniform.
 
 We use this implementation to compare our new regret bound against prior bounds (Dong & Van Roy, 2019; Russo & Van Roy, 2014).
 
 ---
 
-### Regret vs time with bounds (β ∈ {2,4})
+### Regret vs time with bounds ($\beta \in \{2,4\}$)
 Left plot: empirical cumulative regret (mean over runs) and two bounds.  
-Right plot: cumulative regret at $T=200$ vs β with the same bounds.
+Right plot: cumulative regret at $T=200$ vs $\beta$ with the same bounds.
 
 <p align="center">
   <img src="figures/regret_with_bounds_b2_b4.png" alt="Regret with bounds for beta=2 and beta=4" width="48%">
@@ -16,7 +16,7 @@ Right plot: cumulative regret at $T=200$ vs β with the same bounds.
 </p>
 
 **Commentary:**  
-The **left plot** shows the evolution of regret and two regret bounds for $\beta\in\{2,4\}$. Our bound is consistently tighter over the entire horizon and is less sensitive to increases in β. The **right plot** shows cumulative regret at $T = 200$ and as β varies; our bound remains competitive across the full range and quickly becomes orders of magnitude smaller than alternatives for moderate/large β. In contrast, the compared bounds grow rapidly with and can become vacuous.
+The **left plot** shows the evolution of regret and two regret bounds for $\beta\in\{2,4\}$. Our bound is consistently tighter over the entire horizon and is less sensitive to increases in $\beta$. The **right plot** shows cumulative regret at $T = 200$ and as $\beta$ varies; our bound remains competitive across the full range and quickly becomes orders of magnitude smaller than alternatives for moderate/large $\beta$. In contrast, the compared bounds grow rapidly with and can become vacuous.
 
 > Note: the 95% confidence intervals are very tight and not visually apparent on the bounded plots above. For completeness, we include CI versions:
 
@@ -125,7 +125,7 @@ PY
 
 ### 2) Make the figures
 
-**(a) Regret vs time with bounds (β = 2 and 4):**
+**(a) Regret vs time with bounds ($\beta = 2$ and $\beta = 4$):**
 ```bash
 python - <<'PY'
 from plots_ts import plot_cumulative_regret_with_bounds_two_betas
@@ -139,7 +139,7 @@ plot_cumulative_regret_with_bounds_two_betas(
 PY
 ```
 
-**(b) Regret at T=200 vs β with bounds:**
+**(b) Regret at $T=200$ vs $\beta$ with bounds:**
 ```bash
 python - <<'PY'
 from plots_ts import plot_final_regret_vs_beta_with_bounds
@@ -177,9 +177,9 @@ PY
 
 ---
 
-## Citation pointers for the bounds
+## References
 
-- **Russo & Van Roy (2014).** *Learning to Optimize Via Posterior Sampling*.  
-- **Dong, Van Roy (2018).** *An Information-Theoretic Analysis of Thompson Sampling with Many Actions*.  
+- **Russo & Van Roy (2014).** [*Learning to Optimize Via Posterior Sampling*](https://arxiv.org/pdf/1301.2609).  
+- **Dong, Van Roy (2018).** [*An Information-Theoretic Analysis of Thompson Sampling with Many Actions*](https://arxiv.org/pdf/1805.11845).  
 
 
