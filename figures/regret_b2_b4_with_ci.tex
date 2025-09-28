@@ -2,9 +2,8 @@
 \begin{tikzpicture}
 
 \definecolor{darkgray176}{RGB}{176,176,176}
-\definecolor{darkorange25512714}{RGB}{255,127,14}
+\definecolor{darkslateblue11672155}{RGB}{116,72,155}
 \definecolor{lightgray204}{RGB}{204,204,204}
-\definecolor{steelblue31119180}{RGB}{31,119,180}
 
 \begin{axis}[
 legend cell align={left},
@@ -16,20 +15,32 @@ legend style={
   anchor=north west,
   draw=lightgray204
 },
+legend style={
+  fill opacity=0.8,
+  draw opacity=1,
+  text opacity=1,
+  at={(0.97,0.03)},
+  anchor=south east,
+  draw=lightgray204
+},
 log basis y={10},
 tick align=outside,
 tick pos=left,
 x grid style={darkgray176},
-xlabel={t},
+xlabel={T},
+xmajorgrids,
 xmin=-8.95, xmax=209.95,
+xminorgrids,
 xtick style={color=black},
 y grid style={darkgray176},
-ylabel={Cumulative regret (log scale)},
+ylabel={Cumulative Regret (log scale)},
+ymajorgrids,
 ymin=0.294796537984689, ymax=52.7600236002504,
+yminorgrids,
 ymode=log,
 ytick style={color=black}
 ]
-\path [fill=steelblue31119180, fill opacity=0.2]
+\path [draw=darkslateblue11672155, fill=darkslateblue11672155, opacity=0.2]
 (axis cs:1,0.379043459892273)
 --(axis cs:1,0.373182773590088)
 --(axis cs:2,0.743709325790405)
@@ -434,7 +445,7 @@ ytick style={color=black}
 --(axis cs:1,0.379043459892273)
 --cycle;
 
-\path [fill=darkorange25512714, fill opacity=0.2]
+\path [draw=darkslateblue11672155, fill=darkslateblue11672155, opacity=0.2]
 (axis cs:1,0.469250530004501)
 --(axis cs:1,0.455531805753708)
 --(axis cs:2,0.894325256347656)
@@ -839,7 +850,7 @@ ytick style={color=black}
 --(axis cs:1,0.469250530004501)
 --cycle;
 
-\addplot [semithick, steelblue31119180]
+\addplot [thick, darkslateblue11672155, forget plot]
 table {%
 1 0.37611311674118
 2 0.749431073665619
@@ -1042,8 +1053,7 @@ table {%
 199 40.1863822937012
 200 40.3149337768555
 };
-\addlegendentry{$\beta=2.0$}
-\addplot [semithick, darkorange25512714, dashed]
+\addplot [thick, darkslateblue11672155, dashed, forget plot]
 table {%
 1 0.462391167879105
 2 0.907955169677734
@@ -1246,7 +1256,6 @@ table {%
 199 20.8050403594971
 200 20.851770401001
 };
-\addlegendentry{$\beta=4.0$}
 \end{axis}
 
 \end{tikzpicture}

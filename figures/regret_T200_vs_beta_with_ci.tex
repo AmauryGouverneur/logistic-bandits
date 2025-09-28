@@ -2,8 +2,8 @@
 \begin{tikzpicture}
 
 \definecolor{darkgray176}{RGB}{176,176,176}
+\definecolor{darkslateblue11672155}{RGB}{116,72,155}
 \definecolor{lightgray204}{RGB}{204,204,204}
-\definecolor{steelblue31119180}{RGB}{31,119,180}
 
 \begin{axis}[
 legend cell align={left},
@@ -18,14 +18,14 @@ xmin=-0.2375, xmax=10.4875,
 xminorgrids,
 xtick style={color=black},
 y grid style={darkgray176},
-ylabel={Cumulative regret at T=200 (log scale)},
+ylabel={Regret at T=200 (log scale)},
 ymajorgrids,
 ymin=4.13663816314786, ymax=47.5324581440301,
 yminorgrids,
 ymode=log,
 ytick style={color=black}
 ]
-\path [fill=steelblue31119180, fill opacity=0.2]
+\path [draw=darkslateblue11672155, fill=darkslateblue11672155, opacity=0.2]
 (axis cs:0.25,12.3315367615516)
 --(axis cs:0.25,12.1970361792749)
 --(axis cs:0.5,22.8338077879087)
@@ -55,10 +55,10 @@ ytick style={color=black}
 --(axis cs:0.5,23.352686626103)
 --(axis cs:0.25,12.3315367615516)
 --cycle;
-\addlegendimage{area legend, fill=steelblue31119180, fill opacity=0.2}
+\addlegendimage{area legend, draw=darkslateblue11672155, fill=darkslateblue11672155, opacity=0.2}
 \addlegendentry{95% CI}
 
-\addplot [semithick, steelblue31119180, mark=*, mark size=3, mark options={solid}]
+\addplot [thick, darkslateblue11672155]
 table {%
 0.25 12.2642864704132
 0.5 23.0932472070058
@@ -74,7 +74,7 @@ table {%
 9 5.56205597718557
 10 4.9265383541584
 };
-\addlegendentry{Cumulative regret at T=200}
+\addlegendentry{Thompson Sampling (mean)}
 \end{axis}
 
 \end{tikzpicture}

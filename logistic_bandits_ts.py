@@ -10,6 +10,7 @@ torch.set_float32_matmul_precision("high")
 torch.backends.cudnn.benchmark = True
 
 from tqdm import trange
+import numpy as np
 from mh_sphere import MHSphereSampler 
 
 # ------------------------------- utils -------------------------------
@@ -179,7 +180,7 @@ def sweep_betas(
     Saves one file per beta under `save_dir`.
     """
     if betas is None:
-        betas = [0.25, 0.5, 1.0, 1.5, 2.0] + list(range(3, 11))  # default: 0.25..10
+        betas = np.r_[0.25:4.0+0.25:0.25,  4.5:10.0+0.5:0.5].tolist()
 
     results = {}
     for beta in betas:

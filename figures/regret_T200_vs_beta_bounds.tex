@@ -1,0 +1,112 @@
+% This file was created with matplot2tikz v0.4.0.
+\begin{tikzpicture}
+
+\definecolor{crimson2143940}{RGB}{214,39,40}
+\definecolor{darkorange25512714}{RGB}{255,127,14}
+\definecolor{darkslateblue11672155}{RGB}{116,72,155}
+\definecolor{forestgreen4416044}{RGB}{44,160,44}
+\definecolor{lightgray204}{RGB}{204,204,204}
+\definecolor{mediumpurple148103189}{RGB}{148,103,189}
+\definecolor{sienna1408675}{RGB}{140,86,75}
+\definecolor{steelblue31119180}{RGB}{31,119,180}
+
+\begin{axis}[
+legend cell align={left},
+legend style={
+  fill opacity=0.8,
+  draw opacity=1,
+  text opacity=1,
+  at={(0.03,0.97)},
+  anchor=north west,
+  draw=none
+},
+log basis y={10},
+tick align=outside,
+tick pos=left,
+x grid style={lightgray204},
+xlabel={\(\displaystyle \beta\)},
+xmajorgrids,
+xmin=-0.2375, xmax=10.4875,
+xtick style={color=black},
+y grid style={lightgray204},
+ylabel={Regret at T=200 (log scale)},
+ymajorgrids,
+ymin=2.70764291880501, ymax=1417428.68215963,
+ymode=log,
+ytick style={color=black}
+]
+\addplot [thick, darkslateblue11672155, forget plot]
+table {%
+0.25 12.2642860412598
+0.5 23.0932445526123
+1 36.7504005432129
+1.5 41.1062088012695
+2 40.3149337768555
+3 30.2105331420898
+4 20.851770401001
+5 14.955286026001
+6 11.0575094223022
+7 8.37128734588623
+8 7.16092729568481
+9 5.56205606460571
+10 4.92653799057007
+};
+\addplot [thick, steelblue31119180, forget plot]
+table {%
+0.25 235.836567164896
+0.5 245.317784984051
+1 285.500070458736
+1.5 360.938153533166
+2 536.738086650259
+3 982.60188490951
+4 2201.6943401755
+5 5518.14646145687
+6 14534.1600954733
+7 39042.580057954
+8 105663.502891984
+9 286757.994726928
+10 779023.878737317
+};
+\addplot [thick, forestgreen4416044, forget plot]
+table {%
+0.25 242.414750355918
+0.5 280.223353062373
+1 319.881911566768
+1.5 345.259298932133
+2 365.314343603036
+3 398.257865915093
+4 425.947755181648
+5 447.877528849685
+6 466.318001416613
+7 482.592235552795
+8 497.053496498585
+9 509.993512556672
+10 521.651501955611
+};
+\addplot [semithick, steelblue31119180, mark=o, mark size=3.5, mark options={solid,fill opacity=0,draw=darkslateblue11672155}, only marks, forget plot]
+table {%
+2 40.3149337768555
+};
+\addplot [semithick, darkorange25512714, mark=diamond, mark size=3.5, mark options={solid,fill opacity=0,draw=darkslateblue11672155}, only marks, forget plot]
+table {%
+4 20.851770401001
+};
+\addplot [semithick, forestgreen4416044, mark=o, mark size=3.5, mark options={solid,fill opacity=0,draw=steelblue31119180}, only marks, forget plot]
+table {%
+2 536.738086650259
+};
+\addplot [semithick, crimson2143940, mark=diamond, mark size=3.5, mark options={solid,fill opacity=0,draw=steelblue31119180}, only marks, forget plot]
+table {%
+4 2201.6943401755
+};
+\addplot [semithick, mediumpurple148103189, mark=o, mark size=3.5, mark options={solid,fill opacity=0,draw=forestgreen4416044}, only marks, forget plot]
+table {%
+2 365.314343603036
+};
+\addplot [semithick, sienna1408675, mark=diamond, mark size=3.5, mark options={solid,fill opacity=0,draw=forestgreen4416044}, only marks, forget plot]
+table {%
+4 425.947755181648
+};
+\end{axis}
+
+\end{tikzpicture}
