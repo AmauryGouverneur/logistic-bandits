@@ -1,0 +1,80 @@
+% This file was created with matplot2tikz v0.4.0.
+\begin{tikzpicture}
+
+\definecolor{darkgray176}{RGB}{176,176,176}
+\definecolor{lightgray204}{RGB}{204,204,204}
+\definecolor{steelblue31119180}{RGB}{31,119,180}
+
+\begin{axis}[
+legend cell align={left},
+legend style={fill opacity=0.8, draw opacity=1, text opacity=1, draw=lightgray204},
+log basis y={10},
+tick align=outside,
+tick pos=left,
+x grid style={darkgray176},
+xlabel={\(\displaystyle \beta\)},
+xmajorgrids,
+xmin=-0.2375, xmax=10.4875,
+xminorgrids,
+xtick style={color=black},
+y grid style={darkgray176},
+ylabel={Cumulative regret at T=200 (log scale)},
+ymajorgrids,
+ymin=4.13663816314786, ymax=47.5324581440301,
+yminorgrids,
+ymode=log,
+ytick style={color=black}
+]
+\path [fill=steelblue31119180, fill opacity=0.2]
+(axis cs:0.25,12.3315367615516)
+--(axis cs:0.25,12.1970361792749)
+--(axis cs:0.5,22.8338077879087)
+--(axis cs:1,35.9340350486291)
+--(axis cs:1.5,39.672874470227)
+--(axis cs:2,38.9519716013575)
+--(axis cs:3,28.9501674430497)
+--(axis cs:4,19.9104398594706)
+--(axis cs:5,14.1924547606632)
+--(axis cs:6,10.3734295309167)
+--(axis cs:7,7.90617733937607)
+--(axis cs:8,6.68951106866915)
+--(axis cs:9,5.21178065689331)
+--(axis cs:10,4.62215953900874)
+--(axis cs:10,5.23091716930806)
+--(axis cs:10,5.23091716930806)
+--(axis cs:9,5.91233129747783)
+--(axis cs:8,7.63234426974536)
+--(axis cs:7,8.83639663714066)
+--(axis cs:6,11.7415883918026)
+--(axis cs:5,15.7181167827125)
+--(axis cs:4,21.7931001478027)
+--(axis cs:3,31.4708971245163)
+--(axis cs:2,41.677892105867)
+--(axis cs:1.5,42.5395486000448)
+--(axis cs:1,37.5667696935482)
+--(axis cs:0.5,23.352686626103)
+--(axis cs:0.25,12.3315367615516)
+--cycle;
+\addlegendimage{area legend, fill=steelblue31119180, fill opacity=0.2}
+\addlegendentry{95% CI}
+
+\addplot [semithick, steelblue31119180, mark=*, mark size=3, mark options={solid}]
+table {%
+0.25 12.2642864704132
+0.5 23.0932472070058
+1 36.7504023710887
+1.5 41.1062115351359
+2 40.3149318536123
+3 30.210532283783
+4 20.8517700036367
+5 14.9552857716878
+6 11.0575089613597
+7 8.37128698825836
+8 7.16092766920725
+9 5.56205597718557
+10 4.9265383541584
+};
+\addlegendentry{Cumulative regret at T=200}
+\end{axis}
+
+\end{tikzpicture}
