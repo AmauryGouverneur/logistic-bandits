@@ -45,7 +45,12 @@ logistic-bandits/
 ```
 
 ### What the core files do
-
+- **`logistic_bandits_ts.py`**  
+  Runs **Thompson Sampling** with the logistic likelihood. We keep chain states across time \(t\) to avoid re-burning in. The runner saves:
+  - Per-run per-time regrets: `results_experiments/logistic_ts_all_beta_<β>_d_<d>.pt` (tensor \((N,T)\)).
+  - The average (mean over runs): `..._avg_...pt` (tensor \((T,)\)).
+- **`plots_ts.py`**  
+  Loads saved results and produces the four figures above. It also exports TikZ via `matplot2tikz`.
 - **`mh_sphere.py`**  
   Implements **MH on the sphere** with **vMF** random-walk proposals. We operate on shape \((B,K,d)\): \(B\) experiments in parallel, each with \(K\) chains, in \(d\) dimensions. The proposal is
   \[
@@ -53,13 +58,7 @@ logistic-bandits/
   \]
   and we accept with \(\min\{1, \exp(\log p(\theta') - \log p(\theta))\}\). The code runs entirely on CUDA when available.
 
-- **`logistic_bandits_ts.py`**  
-  Runs **Thompson Sampling** with the logistic likelihood. We keep chain states across time \(t\) to avoid re-burning in. The runner saves:
-  - Per-run per-time regrets: `results_experiments/logistic_ts_all_beta_<β>_d_<d>.pt` (tensor \((N,T)\)).
-  - The average (mean over runs): `..._avg_...pt` (tensor \((T,)\)).
 
-- **`plots_ts.py`**  
-  Loads saved results and produces the four figures above. It also exports TikZ via `matplot2tikz`.
 
 ---
 
@@ -175,20 +174,6 @@ plot_final_cumulative_regret_vs_beta(
 )
 PY
 ```
-
----
-
-## How the MH sampler works
-
-- **Target posterior** over \(\theta \in \mathbb S^{d-1}\) with **uniform prior** and logistic likelihood:
-  \[
-  \log p(\theta \mid \mathcal D_t)
-    \;=\; \sum_{s=1}^t \left[r_s \cdot \beta (a_s^\top \theta) \;-\; \mathrm{softplus}\!\big(\beta (a_s^\top \theta)\big)\right].
-  \]
-- **Proposal (random walk vMF):** \( q(\theta' \mid \theta) = \mathrm{vMF}(\mu=\theta,\kappa) \) on the sphere.
-- **Accept/Reject:** standard MH with symmetric proposals (\(q\) cancels in the ratio).
-- **Chains:** for each experiment we keep \(K\) chains over time \(t=1,\dots,T\). Each round, we do only a few MH steps to update the batch of chains given the new data point to provide some speedup.
-- **Vectorization:** we run \(B\) experiments \(\times\) \(K\) chains in a single CUDA kernel flow, using batched matmuls \( \mathrm{bmm}(A, \Theta^\top)\) to evaluate the log-likelihoods efficiently.
 
 ---
 
