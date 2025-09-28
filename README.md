@@ -47,8 +47,8 @@ logistic-bandits/
 ### What the core files do
 - **`logistic_bandits_ts.py`**  
   Runs **Thompson Sampling** with the logistic likelihood. The results are saved in two files:
-  - Per-run per-time regrets: `results_experiments/logistic_ts_all_beta_<β>_d_<d>.pt` (tensor $(N,T)$).
-  - The average (mean over runs): `..._avg_...pt` (tensor $(T,)$).
+  - Per-run per-time regrets: `results_experiments/logistic_ts_all_beta_<β>_d_<d>.pt` (tensor (N,T)).
+  - The average (mean over runs): `..._avg_...pt` (tensor (T,)).
 - **`plots_ts.py`**  
   Loads saved results and produces the four figures above. It also exports TikZ via `matplot2tikz`.
 - **`mh_sphere.py`**  
