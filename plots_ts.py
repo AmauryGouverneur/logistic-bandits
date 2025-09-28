@@ -12,6 +12,7 @@ from scipy.stats import norm
 from scipy.optimize import minimize_scalar
 import matplot2tikz as tikzplotlib
 
+DARKORANGE = (255/255, 127/255, 14/255)      # darkorange25512714
 STEELBLUE = (31/255, 119/255, 180/255)      # steelblue31119180
 FORESTGRN = (44/255, 160/255,  44/255)      # forestgreen4416044
 PURPLE    = (116/255, 72/255, 155/255)      # purple11672155
@@ -237,6 +238,52 @@ def _delta_beta(beta):
     i = np.argmax(vals)
     return float(candidates[i])
 
+import numpy as np
+
+def _bound_russo_van_roy(beta: float, d: int, T, gamma: float = 1.0,
+                                 C: float = 1.0, sigma: float = 0.5, dimK: int | None = None):
+    """
+    Explicit TS regret upper bound for logistic bandits (Russo & Van Roy, Propositon 10 + Propositon 12),
+    specialized with C=1 (Bernoulli rewards), sigma=1/2, and dimK(F) ≤ d by default.
+
+    R(T) <= 1+ (dimE(F,T^{-1}) + 1) C + 16 σ sqrt(dimE(F,T^{-1})*(1 + o(1) + dimK)log(T)T
+
+    Parameters
+    ----------
+    beta : slope parameter in sigmoid(beta * <theta,phi>)
+    d    : dimension
+    T    : scalar or 1D array of horizons
+    gamma : bound s.t. ||phi(a)|| ≤ gamma  
+    C    : reward bound (Bernoulli ⇒ 1)
+    sigma: sub-Gaussian parameter (Bernoulli ⇒ 1/2)
+    dimK : Kolmogorov dimension upper bound (defaults to d)
+
+    Returns
+    -------
+    np.ndarray of the same shape as T with the bound values.
+    """
+    T = np.asarray(T, dtype=float)
+    dimK = d if dimK is None else int(dimK)
+
+    # derivative bounds over x ∈ [-S*gamma, S*gamma]
+    E = np.exp(beta * gamma)
+    h_min = beta * E / (1.0 + E) ** 2     # underline h
+    r = (1.0 + E) ** 2 / (4.0 * E)
+
+    # explicit eluder-dimension bound at epsilon = 1/T (Prop. 12):
+    # dimE ≤ (3 d r^2 e/(e-1)) * ln( (3r/2) * [1 + (2 S h_min T)^2] ) + 1
+    const = (3.0 * d * (r ** 2) * np.e) / (np.e - 1.0)
+    inside = (3.0 * r**2) * (1.0 + (2.0 * h_min * T) ** 2)
+    dim_E = const * np.log(inside) + 1.0
+
+    # Prop. 10 with C=1, sigma=1/2, dimK ≤ d:
+    # Reg ≤ 1 + (dim_E + 1) * C + 16*sigma * sqrt( D_E * (1 + dimK) * log T * T )
+    # use max(T, e) to keep log positive for small T
+    logT = np.log(np.maximum(T, np.e))
+    bound = 1.0 + (dim_E + 1.0) * C + 16.0 * sigma * np.sqrt(dim_E * (1.0 + dimK) * logT * T)
+    return bound
+
+
 
 
 def _bound_dong_van_roy(beta: float, d: int, T_vec: np.ndarray) -> np.ndarray:
@@ -350,8 +397,10 @@ def plot_cumulative_regret_with_bounds_two_betas(
     x = np.arange(1, T_use + 1, dtype=float)
 
     # Bounds (vectorized in T)
+    b1_rvr  = _bound_russo_van_roy(beta1, d, x)
     b1_dvr  = _bound_dong_van_roy(beta1, d, x)
     b1_ours = _bound_ours(beta1, d, x)
+    b2_rvr  = _bound_russo_van_roy(beta2, d, x)
     b2_dvr  = _bound_dong_van_roy(beta2, d, x)
     b2_ours = _bound_ours(beta2, d, x)
 
@@ -366,11 +415,13 @@ def plot_cumulative_regret_with_bounds_two_betas(
 
     # β = 2.0 — solid
     plt.plot(x, mean_cum1, linestyle='-', color=PURPLE,    linewidth=lw_emp)
+    plt.plot(x, b1_rvr,  linestyle='-', color=DARKORANGE, linewidth=lw_bnd)
     plt.plot(x, b1_dvr,   linestyle='-', color=STEELBLUE,  linewidth=lw_bnd)
     plt.plot(x, b1_ours,  linestyle='-', color=FORESTGRN,  linewidth=lw_bnd)
 
     # β = 4.0 — dashed
     plt.plot(x, mean_cum2, linestyle='--', color=PURPLE,    linewidth=lw_emp)
+    plt.plot(x, b2_rvr,  linestyle='--', color=DARKORANGE, linewidth=lw_bnd)
     plt.plot(x, b2_dvr,   linestyle='--', color=STEELBLUE,  linewidth=lw_bnd)
     plt.plot(x, b2_ours,  linestyle='--', color=FORESTGRN,  linewidth=lw_bnd)
 
@@ -380,11 +431,13 @@ def plot_cumulative_regret_with_bounds_two_betas(
 
     # β = 2.0 — circle markers (hollow)
     plt.plot([xT], [mean_cum1[-1]], marker='o', mfc='none', mec=PURPLE,    mew=1.5, ms=ms, linestyle='None')
+    plt.plot([xT], [b1_rvr[-1]],  marker='o', mfc='none', mec=DARKORANGE, mew=1.5, ms=ms, linestyle='None')
     plt.plot([xT], [b1_dvr[-1]],    marker='o', mfc='none', mec=STEELBLUE, mew=1.5, ms=ms, linestyle='None')
     plt.plot([xT], [b1_ours[-1]],   marker='o', mfc='none', mec=FORESTGRN, mew=1.5, ms=ms, linestyle='None')
 
     # β = 4.0 — diamond markers (hollow)
     plt.plot([xT], [mean_cum2[-1]], marker='D', mfc='none', mec=PURPLE,    mew=1.5, ms=ms, linestyle='None')
+    plt.plot([xT], [b2_rvr[-1]],  marker='D', mfc='none', mec=DARKORANGE, mew=1.5, ms=ms, linestyle='None')
     plt.plot([xT], [b2_dvr[-1]],    marker='D', mfc='none', mec=STEELBLUE, mew=1.5, ms=ms, linestyle='None')
     plt.plot([xT], [b2_ours[-1]],   marker='D', mfc='none', mec=FORESTGRN, mew=1.5, ms=ms, linestyle='None')
 
@@ -395,6 +448,7 @@ def plot_cumulative_regret_with_bounds_two_betas(
     # Legend A: color → curve type
     color_handles = [
         Line2D([0], [0], color=PURPLE,    lw=2.0, linestyle='-', label="Thompson Sampling"),
+        Line2D([0], [0], color=DARKORANGE, lw=2.0, linestyle='-', label="Russo & Van Roy (2014)"),
         Line2D([0], [0], color=STEELBLUE, lw=2.0, linestyle='-', label="Dong & Van Roy (2018)"),
         Line2D([0], [0], color=FORESTGRN, lw=2.0, linestyle='-', label="This paper"),
     ]
@@ -451,7 +505,7 @@ def plot_final_regret_vs_beta_with_bounds(
     """
     os.makedirs(figdir, exist_ok=True)
 
-    beta_vals, emp_vals, dvr_vals, ours_vals = [], [], [], []
+    beta_vals, emp_vals, rvr_vals, dvr_vals, ours_vals = [], [], [], [], []
     for b in betas:
         b = float(b)
         runs = load_runs(b, d, save_dir)
@@ -466,11 +520,13 @@ def plot_final_regret_vs_beta_with_bounds(
         emp_mean = float(cum_T.mean().item())
 
         # bounds at scalar T
+        rvr = float(_bound_russo_van_roy(b, d, T_use))
         dvr  = float(_bound_dong_van_roy(b, d, T_use))
         ours = float(_bound_ours(b, d, T_use))
 
         beta_vals.append(b)
         emp_vals.append(emp_mean)
+        rvr_vals.append(rvr)
         dvr_vals.append(dvr)
         ours_vals.append(ours)
 
@@ -480,6 +536,7 @@ def plot_final_regret_vs_beta_with_bounds(
 
     beta_np = np.array(beta_vals, dtype=float)
     emp_np  = np.array(emp_vals,  dtype=float)
+    rvr_np  = np.array(rvr_vals,  dtype=float)
     dvr_np  = np.array(dvr_vals,  dtype=float)
     ours_np = np.array(ours_vals, dtype=float)
 
@@ -490,8 +547,9 @@ def plot_final_regret_vs_beta_with_bounds(
 
     # Lines
     emp_line,  = plt.plot(beta_np, emp_np,  color=PURPLE,    linewidth=2.0)
-    dvr_line,  = plt.plot(beta_np, dvr_np,  color=STEELBLUE, linewidth=2.0)
-    ours_line, = plt.plot(beta_np, ours_np, color=FORESTGRN, linewidth=2.0)
+    rvr_line,  = plt.plot(beta_np, rvr_np,  color=DARKORANGE, linewidth=1.8)
+    dvr_line,  = plt.plot(beta_np, dvr_np,  color=STEELBLUE, linewidth=1.8)
+    ours_line, = plt.plot(beta_np, ours_np, color=FORESTGRN, linewidth=1.8)
 
     # Hollow markers at β=2.0 (circle) and β=4.0 (diamond)
     ms, mew = 7, 1.5
@@ -502,7 +560,7 @@ def plot_final_regret_vs_beta_with_bounds(
             xT, yT = beta_np[idx[0]], y_vals[idx[0]]
             plt.plot([xT], [yT], marker=marker, mfc='none', mec=color, mew=mew, ms=ms, linestyle='None')
 
-    for arr, col in [(emp_np, PURPLE), (dvr_np, STEELBLUE), (ours_np, FORESTGRN)]:
+    for arr, col in [(emp_np, PURPLE), (rvr_np, DARKORANGE), (dvr_np, STEELBLUE), (ours_np, FORESTGRN)]:
         _mark_at_beta(2.0, 'o', col, arr)  # circle at β=2.0
         _mark_at_beta(4.0, 'D', col, arr)  # diamond at β=4.0
 
@@ -515,8 +573,9 @@ def plot_final_regret_vs_beta_with_bounds(
     # Legend: color → curve type (proxy handles)
     color_handles = [
         Line2D([0], [0], color=PURPLE,    lw=2.0, linestyle='-', label="Thompson Sampling"),
-        Line2D([0], [0], color=STEELBLUE, lw=2.0, linestyle='-', label="Dong & Van Roy (2018)"),
-        Line2D([0], [0], color=FORESTGRN, lw=2.0, linestyle='-', label="This paper"),
+        Line2D([0], [0], color=DARKORANGE, lw=1.8, linestyle='-', label="Russo & Van Roy (2014)"),
+        Line2D([0], [0], color=STEELBLUE, lw=1.8, linestyle='-', label="Dong & Van Roy (2018)"),
+        Line2D([0], [0], color=FORESTGRN, lw=1.8, linestyle='-', label="This paper"),
     ]
     leg_colors = ax.legend(handles=color_handles, loc="upper left",
                            frameon=False)

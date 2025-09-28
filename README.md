@@ -1,12 +1,200 @@
-# Logistic Bandits with Thompson Sampling (vMF–MH on the Sphere)
+# Logistic Bandits — Thompson Sampling with MH on the Sphere
 
-This repo runs a logistic bandit with actions and parameters on the unit sphere.
-Posterior sampling uses Metropolis–Hastings on \(\mathbb S^{d-1}\).
+This repo contains an of Thompson Sampling for **logistic bandits** where both the action set and parameter set are the unit sphere \( \mathbb S^{d-1}\). Posterior sampling is done with Metropolis–Hastings (MH) random walks on the sphere using von Mises–Fisher. We consider a synthetic logistic bandit with dimension \(d=10\), horizon \(T=200\), and slope parameter \(\beta\in[0.25,10]\). The action and parameter spaces are both the unit sphere, and the prior on \(\Theta\) is uniform.
 
-## Quickstart
+We use this implementation to compare our new regret bound against prior bounds (Dong & Van Roy, 2019; Russo & Van Roy, 2014).
+
+---
+
+### Regret vs time with bounds (β ∈ {2,4})
+Left plot: empirical cumulative regret (mean over runs) and two bounds.  
+Right plot: cumulative regret at \(T=200\) vs β with the same bounds.
+
+<p align="center">
+  <img src="figures/regret_with_bounds_b2_b4.png" alt="Regret with bounds for beta=2 and beta=4" width="48%">
+  <img src="figures/regret_T200_vs_beta_bounds.png" alt="Regret at T=200 vs beta with bounds" width="48%">
+</p>
+
+**Commentary:**  
+The **left plot** shows the evolution of regret and two regret bounds for \(\beta\in\{2,4\}\). Our bound is consistently tighter over the entire horizon and is less sensitive to increases in β. The **right plot** shows cumulative regret at \(T = 200\) and as β varies; our bound remains competitive across the full range and quickly becomes orders of magnitude smaller than alternatives for moderate/large β. In contrast, the compared bounds grow rapidly with and can become vacuous.
+
+> Note: the 95% confidence intervals are very tight and not visually apparent on the bounded plots above. For completeness, we include CI versions:
+
+<p align="center">
+  <img src="figures/regret_b2_b4_with_ci.png" alt="Regret with CI for beta=2 and beta=4" width="48%">
+  <img src="figures/regret_T200_vs_beta_with_ci.png" alt="Regret at T=200 vs beta with CI" width="48%">
+</p>
+
+We produce tikZ exports (`.tex`) for all figures. They can be found in the same `figures/` folder.
+
+---
+
+## Folder structure
+
+```
+logistic-bandits/
+├── logistic_bandits_ts.py     # Main experiment runner (batched MH TS) and helpers
+├── mh_sphere.py               # vMF proposals on the sphere + batched MH kernel
+├── plots_ts.py                # Plotting utilities (PNG + TikZ), bounds, CI, helper runners
+├── results_experiments/       # Saved tensors: per-run and averaged regrets
+│   ├── logistic_ts_all_beta_<β>_d_<d>.pt         # shape: (num_runs, T)
+│   └── logistic_ts_avg_beta_<β>_d_<d>.pt         # shape: (T,)
+├── figures/                   # Rendered figures (.png) and TikZ (.tex)
+├── requirements.txt           # Python dependencies
+└── .venv/                     # (optional) local virtual environment
+```
+
+### What the core files do
+
+- **`mh_sphere.py`**  
+  Implements **MH on the sphere** with **vMF** random-walk proposals. We operate on shape \((B,K,d)\): \(B\) experiments in parallel, each with \(K\) chains, in \(d\) dimensions. The proposal is
+  \[
+  \theta' \sim \mathrm{vMF}(\mu=\theta,\ \kappa),
+  \]
+  and we accept with \(\min\{1, \exp(\log p(\theta') - \log p(\theta))\}\). The code runs entirely on CUDA when available.
+
+- **`logistic_bandits_ts.py`**  
+  Runs **Thompson Sampling** with the logistic likelihood. We keep chain states across time \(t\) to avoid re-burning in. The runner saves:
+  - Per-run per-time regrets: `results_experiments/logistic_ts_all_beta_<β>_d_<d>.pt` (tensor \((N,T)\)).
+  - The average (mean over runs): `..._avg_...pt` (tensor \((T,)\)).
+
+- **`plots_ts.py`**  
+  Loads saved results and produces the four figures above. It also exports TikZ via `matplot2tikz`.
+
+---
+
+## Installation
+
+We recommend a virtual environment:
 
 ```bash
-conda env create -f env/environment.cuda.yml
-conda activate logistic-bandits-cuda
-python scripts/run_experiment.py --config config/default.yaml
-python scripts/plot_results.py --path results_experiments/logistic_ts_beta_2.0_d_10.pt
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+**CUDA:** If you’re on a GPU pod (e.g., `runpod/pytorch:2.8.0-py3.11-cuda12.8.1`). All samplers and math run on GPU if available.
+
+### Requirements
+
+```
+numpy
+torch
+tqdm
+matplotlib
+scipy
+```
+
+For **TikZ** figure export (versions that we found to work together):
+```
+matplot2tikz
+matplotlib==3.7.5
+webcolors==1.13
+```
+
+> If you only need PNGs, you can skip `tikzplotlib` and `webcolors`.
+
+---
+
+## Reproducing the results
+
+### 1) Run the sweep to generate results
+
+This will run \(N\) experiments per \(\beta\), in batches, and save tensors under `results_experiments/`.
+
+```bash
+# Example sweep (edit values as you wish)
+python - <<'PY'
+from logistic_bandits_ts import sweep_betas
+
+betas = betas = np.r_[0.25:4.0+0.25:0.25,  4.5:10.0+0.5:0.5].tolist()
+
+sweep_betas(
+    betas=betas,
+    d=10, T=200,
+    num_exp=120,           # number of independent runs per beta
+    batch_size=12,         # how many runs in parallel on GPU
+    chains=192,            # MH chains per run (posterior samples)
+    mh_steps=10,           # MH steps per time round
+    append=True,           # append new runs if files already exist
+    progress=True,
+)
+PY
+```
+
+
+### 2) Make the figures
+
+**(a) Regret vs time with bounds (β = 2 and 4):**
+```bash
+python - <<'PY'
+from plots_ts import plot_cumulative_regret_with_bounds_two_betas
+plot_cumulative_regret_with_bounds_two_betas(
+    d=10, T=200,
+    beta1=2.0, beta2=4.0,
+    figdir="figures",
+    fig_basename="regret_with_bounds_b2_b4",   # -> .png and .tex
+    log_y=True
+)
+PY
+```
+
+**(b) Regret at T=200 vs β with bounds:**
+```bash
+python - <<'PY'
+from plots_ts import plot_final_regret_vs_beta_with_bounds
+import numpy as np
+
+betas = np.r_[np.arange(0.25, 4.25, 0.25), np.arange(4.5, 10.5, 0.5)]
+plot_final_regret_vs_beta_with_bounds(
+    betas=betas.tolist(),
+    d=10, T=200,
+    figdir="figures",
+    fig_basename="regret_T200_vs_beta_bounds",
+    log_y=True
+)
+PY
+```
+
+**(c) CI versions (optional):**
+```bash
+python - <<'PY'
+from plots_ts import plot_cumulative_regret_two_betas, plot_final_cumulative_regret_vs_beta
+plot_cumulative_regret_two_betas(
+    d=10, T=200,
+    beta_solid=2.0, beta_dashed=4.0,
+    figdir="figures", fig_basename="regret_b2_b4_with_ci",
+    log_y=True
+)
+plot_final_cumulative_regret_vs_beta(
+    betas=[0.25,0.5,1.0,1.5,2.0]+list(range(3,11)),
+    d=10, T=200,
+    figdir="figures", fig_basename="regret_T200_vs_beta_with_ci",
+    log_y=True
+)
+PY
+```
+
+---
+
+## How the MH sampler works
+
+- **Target posterior** over \(\theta \in \mathbb S^{d-1}\) with **uniform prior** and logistic likelihood:
+  \[
+  \log p(\theta \mid \mathcal D_t)
+    \;=\; \sum_{s=1}^t \left[r_s \cdot \beta (a_s^\top \theta) \;-\; \mathrm{softplus}\!\big(\beta (a_s^\top \theta)\big)\right].
+  \]
+- **Proposal (random walk vMF):** \( q(\theta' \mid \theta) = \mathrm{vMF}(\mu=\theta,\kappa) \) on the sphere.
+- **Accept/Reject:** standard MH with symmetric proposals (\(q\) cancels in the ratio).
+- **Chains:** for each experiment we keep \(K\) chains over time \(t=1,\dots,T\). Each round, we do only a few MH steps to update the batch of chains given the new data point to provide some speedup.
+- **Vectorization:** we run \(B\) experiments \(\times\) \(K\) chains in a single CUDA kernel flow, using batched matmuls \( \mathrm{bmm}(A, \Theta^\top)\) to evaluate the log-likelihoods efficiently.
+
+---
+
+## Citation pointers for the bounds
+
+- **Russo & Van Roy (2014).** *Learning to Optimize Via Posterior Sampling*.  
+- **Dong, Van Roy (2018).** *An Information-Theoretic Analysis of Thompson Sampling with Many Actions*.  
+
+
