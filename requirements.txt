@@ -1,6 +1,5 @@
 numpy
 matplotlib==3.7.5
-torch
 tqdm
 scipy
 matplot2tikz

@@ -8,6 +8,7 @@ import torch
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.set_float32_matmul_precision("high")
 torch.backends.cudnn.benchmark = True
+from torch import nn
 
 from tqdm import trange
 import numpy as np
@@ -31,7 +32,7 @@ def sample_prior_theta(d, device=device, dtype=def_dtype):
     x = torch.randn(d, device=device, dtype=dtype)
     return x / x.norm().clamp_min(1e-12)
 
-# ------------------------ batched experiment runner ------------------------
+# ------------------------ experiment runner ------------------------
 
 @torch.no_grad()
 def run_logistic_bandits_TS_exp(
@@ -50,10 +51,10 @@ def run_logistic_bandits_TS_exp(
 ):
     """
     Run `num_exp` independent experiments in chunks of size `batch_size`,
-    with Metroplois-Hasting posterior sampling 
+    with Metropolis-Hastings posterior sampling.
 
     Saves per-run to:
-      results_experiments/logistic_ts_all_beta_{beta}_d_{d}.pt   (N, T)
+      results_experiments/logistic_ts_all_beta_{beta}_d_{d}.pt   (num_exp, T)
     and mean to:
       results_experiments/logistic_ts_avg_beta_{beta}_d_{d}.pt   (T,)
 
@@ -61,12 +62,12 @@ def run_logistic_bandits_TS_exp(
     """
     os.makedirs(save_dir, exist_ok=True)
     if seed is not None:
-        set_seed(seed)
+        torch.manual_seed(seed)
 
-    dev = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     dtype = torch.float32
-    use_cuda = (dev.type == 'cuda')
-    K = chains if chains is not None else (256 if use_cuda else 32)
+    use_cuda = dev.type == "cuda"
+    N = chains if chains is not None else (256 if use_cuda else 32)
 
     file_avg = os.path.join(save_dir, f"logistic_ts_avg_beta_{beta}_d_{d}.pt")
     file_all = os.path.join(save_dir, f"logistic_ts_all_beta_{beta}_d_{d}.pt")
@@ -80,12 +81,12 @@ def run_logistic_bandits_TS_exp(
         avg = all_runs.mean(dim=0)
         return avg, all_runs
 
-    # We will generate 'num_exp' NEW runs into new_runs and then (optionally) append
+    # Prepare storage
     n_chunks = math.ceil(num_exp / batch_size)
     new_runs = torch.zeros(num_exp, T, device=dev, dtype=dtype)
 
     exp_idx = 0
-    outer = trange(n_chunks, desc=f"MH-batched β={beta}, d={d}, B={batch_size}, K={K}", disable=not progress)
+    outer = trange(n_chunks, desc=f"MH-batched β={beta}, d={d}, B={batch_size}, N={N}", disable=not progress)
     for _ in outer:
         B = min(batch_size, num_exp - exp_idx)
 
@@ -95,7 +96,7 @@ def run_logistic_bandits_TS_exp(
         theta_star = torch.randn(B, d, device=dev, dtype=dtype)
         theta_star = theta_star / theta_star.norm(dim=1, keepdim=True).clamp_min(1e-12)
 
-        # Histories (grow along time dimension)
+        # Histories
         A_bt_d = torch.empty(B, 0, d, device=dev, dtype=dtype)   # (B, t, d)
         r_bt   = torch.empty(B, 0, device=dev, dtype=dtype)      # (B, t)
 
@@ -107,26 +108,39 @@ def run_logistic_bandits_TS_exp(
         A_bt_d = torch.cat([A_bt_d, a0.unsqueeze(1)], dim=1)        # (B,1,d)
         r_bt   = torch.cat([r_bt, r0.unsqueeze(1)], dim=1)          # (B,1)
 
-        # Persistent chains per experiment: (B, K, d)
-        Theta_bkd = torch.randn(B, K, d, device=dev, dtype=dtype)
-        Theta_bkd = Theta_bkd / Theta_bkd.norm(dim=2, keepdim=True).clamp_min(1e-12)
+        # N chains per experiment: (B, N, d)
+        Theta_bnd = torch.randn(B, N, d, device=dev, dtype=dtype)
+        Theta_bnd = Theta_bnd / Theta_bnd.norm(dim=2, keepdim=True).clamp_min(1e-12)
 
         regrets = torch.zeros(B, T, device=dev, dtype=dtype)
-        opt_reward = torch.sigmoid(torch.tensor(beta, device=dev, dtype=dtype))  # phi(1)
 
-        for t in range(T):
-            # log posterior for all B experiments & K chains
-            def logp_group(Theta_bkd_local: torch.Tensor) -> torch.Tensor:
-                # Z: (B, t, K) = beta * (A @ Theta^T)
-                Z = beta * torch.bmm(A_bt_d, Theta_bkd_local.transpose(1, 2))
-                return (r_bt.unsqueeze(2) * Z - torch.nn.functional.softplus(Z)).sum(dim=1)  # (B, K)
+        # Initial regret estimate (t=0) using MC
+        dot_ijn = torch.einsum("bid,bjd->bij", Theta_bnd, Theta_bnd)  # (B,N,N)
+        rew_cross = torch.sigmoid(beta * dot_ijn)
+        rew_diag = rew_cross.diagonal(dim1=1, dim2=2)  # (B,N)
+        regret_est = (rew_diag.sum(dim=1) / N) - (rew_cross.mean(dim=(1,2)))
+        regrets[:, 0] = regret_est
 
-            # Do a few MH steps starting from previous Theta_bkd
-            Theta_bkd, _ = sampler.mh_step(Theta_bkd, logp_group, n_steps=mh_steps)
+        # Time loop
+        for t in range(T-1):
+            # log posterior for all B experiments & N chains
+            def logp_group(Theta_bnd_local: torch.Tensor) -> torch.Tensor:
+                Z = beta * torch.bmm(A_bt_d, Theta_bnd_local.transpose(1, 2))  # (B, t, N)
+                return (r_bt.unsqueeze(2) * Z - nn.functional.softplus(Z)).sum(dim=1)  # (B, N)
+
+            # MH update
+            Theta_bnd, _ = sampler.mh_step(Theta_bnd, logp_group, n_steps=mh_steps)
+
+            # --- Monte Carlo regret estimate ---
+            dot_ijn = torch.einsum("bid,bjd->bij", Theta_bnd, Theta_bnd)  # (B,N,N)
+            rew_cross = torch.sigmoid(beta * dot_ijn)
+            rew_diag = rew_cross.diagonal(dim1=1, dim2=2)  # (B,N)
+            regret_est = (rew_diag.sum(dim=1) / N) - (rew_cross.mean(dim=(1,2)))
+            regrets[:, t+1] = regret_est
 
             # Thompson action per experiment: pick a random chain sample
-            idx = torch.randint(0, K, (B,), device=dev)
-            a_t = Theta_bkd[torch.arange(B, device=dev), idx, :]   # (B, d)
+            idx = torch.randint(0, N, (B,), device=dev)
+            a_t = Theta_bnd[torch.arange(B, device=dev), idx, :]   # (B, d)
 
             # Environment step (Bernoulli reward)
             z_t = beta * (a_t * theta_star).sum(dim=1)
@@ -135,11 +149,6 @@ def run_logistic_bandits_TS_exp(
             # Append to history
             A_bt_d = torch.cat([A_bt_d, a_t.unsqueeze(1)], dim=1)
             r_bt   = torch.cat([r_bt, r_t.unsqueeze(1)], dim=1)
-
-            # Rao–Blackwellized expected reward under current posterior
-            proj = (Theta_bkd * theta_star.unsqueeze(1)).sum(dim=2)   # (B, K)
-            mean_reward_est = torch.sigmoid(beta * proj).mean(dim=1)  # (B,)
-            regrets[:, t] = opt_reward - mean_reward_est
 
         new_runs[exp_idx:exp_idx + B] = regrets
         exp_idx += B
@@ -166,9 +175,9 @@ def sweep_betas(
     betas=None,
     d: int = 10,
     T: int = 200,
-    num_exp: int = 120,
+    num_exp: int = 100,
     batch_size: int = 12,
-    chains: int = 192,
+    chains: int = 100,
     mh_steps: int = 10,
     progress: bool = True,
     save_dir: str = "results_experiments",
