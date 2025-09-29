@@ -85,134 +85,7 @@ def _save_png_and_tikz(fig_basename: str, figdir: str = "figures", dpi: int = 15
     print(f"Saved: {png_path}\nSaved: {tex_path}")
 
 
-# ---------- plots ----------
-
-
-
-def plot_cumulative_regret_two_betas(
-    d: int = 10,
-    T: int = 200,
-    beta_solid: float = 2.0,   # solid line
-    beta_dashed: float = 4.0,  # dashed line
-    save_dir: str = "results_experiments",
-    figdir: str = "figures",
-    fig_basename: str = "regret_b2_b4_with_ci",
-    alpha_ci: float = 0.05,
-    log_y: bool = True,
-):
-    """
-    Plot cumulative regret for two betas on the same plot:
-      - beta_solid: solid line
-      - beta_dashed: dashed line
-    Each with mean ± CI shaded region.
-    Saves figures/<fig_basename>.png and .tex
-    """
-    os.makedirs(figdir, exist_ok=True)
-
-    # Load runs (expects your load_runs + _cum_stats utils)
-    runs_solid = load_runs(beta_solid, d, save_dir)
-    runs_dashed = load_runs(beta_dashed, d, save_dir)
-    if runs_solid is None or runs_dashed is None:
-        missing = []
-        if runs_solid is None:  missing.append(beta_solid)
-        if runs_dashed is None: missing.append(beta_dashed)
-        raise FileNotFoundError(f"No saved results for beta(s): {missing}")
-
-    # Match horizons (and clamp to requested T)
-    T_use = min(T, runs_solid.shape[1], runs_dashed.shape[1])
-    runs_solid  = runs_solid[:, :T_use]
-    runs_dashed = runs_dashed[:, :T_use]
-
-    # Cumulative means & CIs
-    mean_solid,  lo_solid,  hi_solid  = _cum_stats(runs_solid)
-    mean_dashed, lo_dashed, hi_dashed = _cum_stats(runs_dashed)
-
-    x = np.arange(1, T_use + 1, dtype=float)
-
-    fig, ax = plt.subplots(figsize=(7, 4.2))
-
-    # β_solid — solid line
-    ax.plot(x, mean_solid.cpu().numpy(), linestyle='-', color=PURPLE, linewidth=2.0)
-    ax.fill_between(x, lo_solid.cpu().numpy(), hi_solid.cpu().numpy(), alpha=0.20, color=PURPLE)
-
-    # β_dashed — dashed line
-    ax.plot(x, mean_dashed.cpu().numpy(), linestyle='--', color=PURPLE, linewidth=2.0)
-    ax.fill_between(x, lo_dashed.cpu().numpy(), hi_dashed.cpu().numpy(), alpha=0.20, color=PURPLE)
-
-    if log_y:
-        ax.set_yscale('log')
-    ax.set_xlabel("T")
-    ax.set_ylabel("Regret" + (" (log scale)" if log_y else ""))
-    ax.grid(True, which='both', linewidth=0.3, alpha=0.4)
-
-    # -------- Legend #1: which beta (line styles) --------
-    handles_beta = [
-        Line2D([0], [0], color=PURPLE, lw=2.0, linestyle='-',  label=fr"TS ($\beta={beta_solid}$)"),
-        Line2D([0], [0], color=PURPLE, lw=2.0, linestyle='--', label=fr"TS ($\beta={beta_dashed}$)"),
-    ]
-    leg1 = ax.legend(handles=handles_beta, loc='upper left', frameon=True)
-    ax.add_artist(leg1)  # keep when adding second legend
-
-    # -------- Legend #2: what styles mean (mean vs CI) --------
-    mean_proxy = Line2D([0], [0], color=PURPLE, lw=2.0, linestyle='-')
-    ci_proxy   = Patch(facecolor=PURPLE, alpha=0.20, edgecolor='none')
-    leg2 = ax.legend(
-        handles=[mean_proxy, ci_proxy],
-        labels=["Mean", f"{int((1 - alpha_ci)*100)}% CI (shaded)"],
-        loc='lower right',
-        frameon=True,
-    )
-
-    plt.tight_layout()
-    _save_png_and_tikz(fig_basename, figdir=figdir)
-
-
-
-def plot_final_cumulative_regret_vs_beta(
-    betas: Sequence[float] = (0.25, 0.5, 1.0, 1.5, 2.0, *range(3, 11)),
-    d: int = 10,
-    T: int = 200,
-    save_dir: str = "results_experiments",
-    figdir: str = "figures",
-    fig_basename: str = "regret_T200_vs_beta_with_ci",
-    alpha_ci: float = 0.05,
-    log_y: bool = True,
-):
-    """
-    For each beta, load (num_exp, T) regrets, take cumulative at time T,
-    then plot mean ± CI vs beta. y-axis log if log_y=True.
-    Saves figures/<fig_basename>.png and .tex
-    """
-    beta_vals, means, los, his = [], [], [], []
-    for b in betas:
-        runs = load_runs(float(b), d, save_dir)
-        T_use = min(T, runs.shape[1])
-        cum_T = runs[:, :T_use].cumsum(dim=1)[:, -1].to(dtype=torch.float64)
-        m, lo, hi = _ci_1d(cum_T.cpu(), alpha=alpha_ci)
-        beta_vals.append(float(b))
-        means.append(float(m))
-        los.append(float(lo))
-        his.append(float(hi))
-
-    import numpy as np
-    beta_np = np.array(beta_vals, dtype=float)
-    mean_np = np.array(means, dtype=float)
-    lo_np   = np.array(los, dtype=float)
-    hi_np   = np.array(his, dtype=float)
-
-    plt.figure(figsize=(7, 4.2))
-    plt.plot(beta_np, mean_np, linestyle='-', label=f"Thompson Sampling (mean)", color=PURPLE, linewidth=2.0)
-    plt.fill_between(beta_np, lo_np, hi_np, alpha=0.20, label=f"{int((1-alpha_ci)*100)}% CI", color=PURPLE)
-    if log_y:
-        plt.yscale('log')
-    plt.xlabel(r"$\beta$")
-    plt.ylabel(f"Regret at T={T}" + (" (log scale)" if log_y else ""))
-    plt.grid(True, which='both', linewidth=0.3, alpha=0.4)
-    plt.legend()
-    plt.tight_layout()
-    _save_png_and_tikz(fig_basename, figdir=figdir)
-
-
+# ---------- bounds ----------
 
 def sigmoid(z):
     return 1.0 / (1.0 + np.exp(-z))
@@ -238,7 +111,6 @@ def _delta_beta(beta):
     i = np.argmax(vals)
     return float(candidates[i])
 
-import numpy as np
 
 def _bound_russo_van_roy(beta: float, d: int, T, gamma: float = 1.0,
                                  C: float = 1.0, sigma: float = 0.5, dimK: int | None = None):
@@ -352,6 +224,136 @@ def _bound_ours(beta: float, d: int, T_vec: np.ndarray) -> np.ndarray:
     r_log_small = np.where(eps_small < 1.0, r_log_small, r_quad)
 
     return np.minimum(r_log, r_log_small)
+
+
+# ---------- plots ----------
+
+
+
+def plot_cumulative_regret_two_betas_with_ci(
+    d: int = 10,
+    T: int = 200,
+    beta_solid: float = 2.0,   # solid line
+    beta_dashed: float = 4.0,  # dashed line
+    save_dir: str = "results_experiments",
+    figdir: str = "figures",
+    fig_basename: str = "regret_b2_b4_with_ci",
+    alpha_ci: float = 0.05,
+    log_y: bool = True,
+):
+    """
+    Plot cumulative regret for two betas on the same plot:
+      - beta_solid: solid line
+      - beta_dashed: dashed line
+    Each with mean ± CI shaded region.
+    Saves figures/<fig_basename>.png and .tex
+    """
+    os.makedirs(figdir, exist_ok=True)
+
+    # Load runs (expects your load_runs + _cum_stats utils)
+    runs_solid = load_runs(beta_solid, d, save_dir)
+    runs_dashed = load_runs(beta_dashed, d, save_dir)
+    if runs_solid is None or runs_dashed is None:
+        missing = []
+        if runs_solid is None:  missing.append(beta_solid)
+        if runs_dashed is None: missing.append(beta_dashed)
+        raise FileNotFoundError(f"No saved results for beta(s): {missing}")
+
+    # Match horizons (and clamp to requested T)
+    T_use = min(T, runs_solid.shape[1], runs_dashed.shape[1])
+    runs_solid  = runs_solid[:, :T_use]
+    runs_dashed = runs_dashed[:, :T_use]
+
+    # Cumulative means & CIs
+    mean_solid,  lo_solid,  hi_solid  = _cum_stats(runs_solid)
+    mean_dashed, lo_dashed, hi_dashed = _cum_stats(runs_dashed)
+
+    x = np.arange(1, T_use + 1, dtype=float)
+
+    fig, ax = plt.subplots(figsize=(7, 4.2))
+
+    # β_solid — solid line
+    ax.plot(x, mean_solid.cpu().numpy(), linestyle='-', color=PURPLE, linewidth=2.0)
+    ax.fill_between(x, lo_solid.cpu().numpy(), hi_solid.cpu().numpy(), alpha=0.20, color=PURPLE)
+
+    # β_dashed — dashed line
+    ax.plot(x, mean_dashed.cpu().numpy(), linestyle='--', color=PURPLE, linewidth=2.0)
+    ax.fill_between(x, lo_dashed.cpu().numpy(), hi_dashed.cpu().numpy(), alpha=0.20, color=PURPLE)
+
+    if log_y:
+        ax.set_yscale('log')
+    ax.set_xlabel("T")
+    ax.set_ylabel("Regret" + (" (log scale)" if log_y else ""))
+    ax.grid(True, which='both', linewidth=0.3, alpha=0.4)
+
+    # -------- Legend #1: which beta (line styles) --------
+    handles_beta = [
+        Line2D([0], [0], color=PURPLE, lw=2.0, linestyle='-',  label=fr"TS ($\beta={beta_solid}$)"),
+        Line2D([0], [0], color=PURPLE, lw=2.0, linestyle='--', label=fr"TS ($\beta={beta_dashed}$)"),
+    ]
+    leg1 = ax.legend(handles=handles_beta, loc='upper left', frameon=True)
+    ax.add_artist(leg1)  # keep when adding second legend
+
+    # -------- Legend #2: what styles mean (mean vs CI) --------
+    mean_proxy = Line2D([0], [0], color=PURPLE, lw=2.0, linestyle='-')
+    ci_proxy   = Patch(facecolor=PURPLE, alpha=0.20, edgecolor='none')
+    leg2 = ax.legend(
+        handles=[mean_proxy, ci_proxy],
+        labels=["Mean", f"{int((1 - alpha_ci)*100)}% CI (shaded)"],
+        loc='lower right',
+        frameon=True,
+    )
+
+    plt.tight_layout()
+    _save_png_and_tikz(fig_basename, figdir=figdir)
+
+
+
+def plot_final_cumulative_regret_vs_beta_with_ci(
+    betas: Sequence[float] = (0.25, 0.5, 1.0, 1.5, 2.0, *range(3, 11)),
+    d: int = 10,
+    T: int = 200,
+    save_dir: str = "results_experiments",
+    figdir: str = "figures",
+    fig_basename: str = "regret_T200_vs_beta_with_ci",
+    alpha_ci: float = 0.05,
+    log_y: bool = True,
+):
+    """
+    For each beta, load (num_exp, T) regrets, take cumulative at time T,
+    then plot mean ± CI vs beta. y-axis log if log_y=True.
+    Saves figures/<fig_basename>.png and .tex
+    """
+    beta_vals, means, los, his = [], [], [], []
+    for b in betas:
+        runs = load_runs(float(b), d, save_dir)
+        T_use = min(T, runs.shape[1])
+        cum_T = runs[:, :T_use].cumsum(dim=1)[:, -1].to(dtype=torch.float64)
+        m, lo, hi = _ci_1d(cum_T.cpu(), alpha=alpha_ci)
+        beta_vals.append(float(b))
+        means.append(float(m))
+        los.append(float(lo))
+        his.append(float(hi))
+
+    import numpy as np
+    beta_np = np.array(beta_vals, dtype=float)
+    mean_np = np.array(means, dtype=float)
+    lo_np   = np.array(los, dtype=float)
+    hi_np   = np.array(his, dtype=float)
+
+    plt.figure(figsize=(7, 4.2))
+    plt.plot(beta_np, mean_np, linestyle='-', label=f"Thompson Sampling (mean)", color=PURPLE, linewidth=2.0)
+    plt.fill_between(beta_np, lo_np, hi_np, alpha=0.20, label=f"{int((1-alpha_ci)*100)}% CI", color=PURPLE)
+    if log_y:
+        plt.yscale('log')
+    plt.xlabel(r"$\beta$")
+    plt.ylabel(f"Regret at T={T}" + (" (log scale)" if log_y else ""))
+    plt.grid(True, which='both', linewidth=0.3, alpha=0.4)
+    plt.legend()
+    plt.tight_layout()
+    _save_png_and_tikz(fig_basename, figdir=figdir)
+
+
 
 
 def plot_cumulative_regret_with_bounds_two_betas(
@@ -479,11 +481,8 @@ def plot_cumulative_regret_with_bounds_two_betas(
     _save_png_and_tikz(fig_basename, figdir=figdir)
 
 
-
-
-
 def plot_final_regret_vs_beta_with_bounds(
-    betas = [0.25, 0.5, 1.0, 1.5, 2.0] + list(range(3, 11)),  # 3..10
+    betas = np.r_[0.25:4.0+0.25:0.25,  4.5:10.0+0.5:0.5].tolist(),
     d: int = 10,
     T: int = 200,
     save_dir: str = "results_experiments",
@@ -493,15 +492,13 @@ def plot_final_regret_vs_beta_with_bounds(
     skip_missing: bool = True,
 ):
     """
-    Cumulative regret at time T vs β (mean only, no CI), with bounds:
+    Cumulative regret at time T vs β, with bounds:
+    Colors:
+      - Russo & Van Roy (2014) [dark orange]
       - Dong & Van Roy (2019) [steel blue]
       - Ours [forest green]
       - TS Empirical mean [purple]
     Adds hollow markers at β=2.0 (circle) and β=4.0 (diamond) for all curves.
-    Grid shown behind in light gray.
-    Legends:
-      • Color = curve type
-      • "T=..." badge legend (replaces the old linestyle legend)
     """
     os.makedirs(figdir, exist_ok=True)
 
@@ -587,38 +584,52 @@ def plot_final_regret_vs_beta_with_bounds(
 
 # ---------- convenience wrappers ----------
 
-def run_plot_final_cumulative_regret_vs_beta():
-    plot_final_cumulative_regret_vs_beta(
+
+def run_plot_final_regret_vs_beta_with_ci():
+    plot_final_cumulative_regret_vs_beta_with_ci(
         betas=np.r_[0.25:4.0+0.25:0.25,  4.5:10.0+0.5:0.5].tolist(),
         d=10, T=200,
         save_dir="results_experiments",
         figdir="figures",
-        fig_basename="regret_T200_vs_beta",
+        fig_basename="regret_T200_vs_beta_with_ci",
         alpha_ci=0.05,
         log_y=True,
     )
 
-def run_plot_final_regret_vs_beta():
-    plot_final_cumulative_regret_vs_beta(
-        betas=np.r_[0.25:4.0+0.25:0.25,  4.5:10.0+0.5:0.5].tolist(),
-        d=10, T=200,
-        save_dir="results_experiments",
-        figdir="figures",
-        fig_basename="regret_T200_vs_beta",
-        alpha_ci=0.05,
-        log_y=True,
-    )
-
-def run_plot_two_betas():
-    plot_cumulative_regret_two_betas(
+def run_plot_two_betas_with_ci():
+    plot_cumulative_regret_two_betas_with_ci(
         d=10, T=200,
         beta_solid=2.0, beta_dashed=4.0,
         save_dir="results_experiments",
         figdir="figures",
-        fig_basename="regret_b2_b4",
+        fig_basename="regret_b2_b4_with_ci",
         alpha_ci=0.05,
         log_y=True,
     )
 
+def run_plot_with_bounds_two_betas():
+    plot_cumulative_regret_with_bounds_two_betas(
+        d=10, T=200,
+        beta1=2.0, beta2=4.0,
+        save_dir="results_experiments",
+        figdir="figures",
+        fig_basename="regret_with_bounds_b2_b4",
+        log_y=True,
+    )
+
+def run_plot_final_regret_vs_beta():
+    plot_final_regret_vs_beta_with_bounds(
+        betas=np.r_[0.25:4.0+0.25:0.25,  4.5:10.0+0.5:0.5].tolist(),
+        d=10, T=200,
+        save_dir="results_experiments",
+        figdir="figures",
+        fig_basename="regret_T200_vs_beta_bounds",
+        log_y=True,
+        skip_missing=True,
+    )
+
 if __name__ == "__main__":
+    run_plot_final_regret_vs_beta_with_ci()
+    run_plot_two_betas_with_ci()
+    run_plot_with_bounds_two_betas()
     run_plot_final_regret_vs_beta()

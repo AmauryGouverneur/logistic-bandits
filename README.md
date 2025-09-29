@@ -98,23 +98,20 @@ webcolors==1.13
 
 ## Reproducing the results
 
-### 1) Run the sweep to generate results
+#### 1) Run the sweep to generate results
 
 This will run $N$ experiments per $\beta$, in batches, and save tensors under `results_experiments/`.
 
 ```bash
-# Example sweep (edit values as you wish)
 python - <<'PY'
 from logistic_bandits_ts import sweep_betas
 
-betas = betas = np.r_[0.25:4.0+0.25:0.25,  4.5:10.0+0.5:0.5].tolist()
-
 sweep_betas(
-    betas=betas,
+    betas=np.r_[0.25:4.0+0.25:0.25,  4.5:10.0+0.5:0.5].tolist(),
     d=10, T=200,
     num_exp=120,           # number of independent runs per beta
     batch_size=12,         # how many runs in parallel on GPU
-    chains=192,            # MH chains per run (posterior samples)
+    chains=192,            # MH chains per run
     mh_steps=10,           # MH steps per time round
     append=True,           # append new runs if files already exist
     progress=True,
@@ -123,57 +120,14 @@ PY
 ```
 
 
-### 2) Make the figures
+#### Make all the figures
 
-**(a) Regret vs time with bounds ($\beta = 2$ and $\beta = 4$):**
+This command produces the two figures (regret vs time for $\beta =2$ and $\beta = 4$, regret vs $\beta$ at $T=200$) in two versions: without bounds but with confidence interval, and with bounds and without confidence intervals. The figures are saved under `figures/` both as a `.png` and a `.tex` file.
+
 ```bash
-python - <<'PY'
-from plots_ts import plot_cumulative_regret_with_bounds_two_betas
-plot_cumulative_regret_with_bounds_two_betas(
-    d=10, T=200,
-    beta1=2.0, beta2=4.0,
-    figdir="figures",
-    fig_basename="regret_with_bounds_b2_b4",   # -> .png and .tex
-    log_y=True
-)
-PY
+python plots_ts.py
 ```
 
-**(b) Regret at $T=200$ vs $\beta$ with bounds:**
-```bash
-python - <<'PY'
-from plots_ts import plot_final_regret_vs_beta_with_bounds
-import numpy as np
-
-betas = np.r_[np.arange(0.25, 4.25, 0.25), np.arange(4.5, 10.5, 0.5)]
-plot_final_regret_vs_beta_with_bounds(
-    betas=betas.tolist(),
-    d=10, T=200,
-    figdir="figures",
-    fig_basename="regret_T200_vs_beta_bounds",
-    log_y=True
-)
-PY
-```
-
-**(c) CI versions (optional):**
-```bash
-python - <<'PY'
-from plots_ts import plot_cumulative_regret_two_betas, plot_final_cumulative_regret_vs_beta
-plot_cumulative_regret_two_betas(
-    d=10, T=200,
-    beta_solid=2.0, beta_dashed=4.0,
-    figdir="figures", fig_basename="regret_b2_b4_with_ci",
-    log_y=True
-)
-plot_final_cumulative_regret_vs_beta(
-    betas=[0.25,0.5,1.0,1.5,2.0]+list(range(3,11)),
-    d=10, T=200,
-    figdir="figures", fig_basename="regret_T200_vs_beta_with_ci",
-    log_y=True
-)
-PY
-```
 
 ---
 
