@@ -92,7 +92,7 @@ matplotlib==3.7.5
 webcolors==1.13
 ```
 
-> If you only need PNGs, you can skip `tikzplotlib` and `webcolors`.
+> If you only need PNGs, you can skip `matplotlib` and `webcolors`.
 
 ---
 
