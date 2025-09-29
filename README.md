@@ -98,7 +98,7 @@ webcolors==1.13
 
 ## Reproducing the results
 
-#### 1) Run the sweep to generate results
+#### Run the sweep to generate results
 
 This will run $N$ experiments per $\beta$, in batches, and save tensors under `results_experiments/`.
 
