@@ -119,6 +119,8 @@ sweep_betas(
 PY
 ```
 
+This can also be achieved by running ```python logistic_bandits_ts.py```. 
+
 
 #### Make all the figures
 
