@@ -22,7 +22,7 @@ DARK      = (0.15, 0.15, 0.15)
 
 # ---------- basic stats ----------
 
-def mean_and_ci(all_runs: torch.Tensor, alpha: float = 0.05) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+def mean_and_ci(all_runs: torch.Tensor, alpha: float = 0.01) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     all_runs: (num_exp, T) tensor
     returns mean, lower, upper each shape (T,)
@@ -59,7 +59,7 @@ def _cum_stats(runs_2d: torch.Tensor):
     return mean_and_ci(cum)
 
 
-def _ci_1d(samples: torch.Tensor, alpha: float = 0.05):
+def _ci_1d(samples: torch.Tensor, alpha: float = 0.01):
     """CI for 1D samples (N,). Returns mean, lo, hi (0-dim tensors)."""
     n = samples.numel()
     mean = samples.mean()
@@ -227,10 +227,10 @@ def _bound_ours(beta: float, d: int, T_vec: np.ndarray) -> np.ndarray:
 
 # ---------- plots ----------
 
-def _compute_ARME(all_runs: torch.Tensor, alpha: float = 0.05) -> float:
+def _compute_ARME(all_runs: torch.Tensor, alpha: float = 0.01) -> float:
     """
     all_runs: (N, T) per-step regret.
-    Returns ARME (trajectory-averaged relative 95% margin of error), scalar in [0, inf).
+    Returns ARME (trajectory-averaged relative 99% margin of error), scalar in [0, inf).
     """
     N, T = all_runs.shape
     cum = all_runs.cumsum(dim=1)                 # (N,T)
@@ -250,7 +250,7 @@ def plot_cumulative_regret_two_betas_with_ci(
     save_dir: str = "results_experiments",
     figdir: str = "figures",
     fig_basename: str = "regret_b2_b4_with_ci",
-    alpha_ci: float = 0.05,
+    alpha_ci: float = 0.01,
     log_y: bool = True,
 ):
     """
@@ -258,7 +258,7 @@ def plot_cumulative_regret_two_betas_with_ci(
       - beta_solid: solid line
       - beta_dashed: dashed line
     Each with mean ± CI shaded region.
-    Also shows ARME (trajectory-averaged relative 95% margin of error) in its own legend.
+    Also shows ARME (trajectory-averaged relative 99% margin of error) in its own legend.
     Saves figures/<fig_basename>.png and .tex
     """
     os.makedirs(figdir, exist_ok=True)
@@ -352,10 +352,10 @@ def plot_cumulative_regret_two_betas_with_ci(
     _save_png_and_tikz(fig_basename, figdir=figdir)
 
 
-def _compute_RME_T(all_runs: torch.Tensor, alpha: float = 0.05) -> float:
+def _compute_RME_T(all_runs: torch.Tensor, alpha: float = 0.01) -> float:
     """
     all_runs: (N, T) per-step regret.
-    Returns RME_T (relative 95% margin of error at final horizon), scalar.
+    Returns RME_T (relative 99% margin of error at final horizon), scalar.
     """
     N, T = all_runs.shape
     cum = all_runs.cumsum(dim=1)                 # (N,T)
@@ -376,7 +376,7 @@ def plot_final_cumulative_regret_vs_beta_with_ci(
     save_dir: str = "results_experiments",
     figdir: str = "figures",
     fig_basename: str = "regret_T200_vs_beta_with_ci",
-    alpha_ci: float = 0.05,
+    alpha_ci: float = 0.01,
     log_y: bool = True,
 ):
     """
@@ -705,7 +705,7 @@ def plot_final_regret_vs_beta_with_bounds(
 # ---------- confidence interval statistics ----------
 
 
-def summarize_uncertainty_for_beta(beta: float, d: int, T: int, save_dir: str = "results_experiments", alpha: float = 0.05):
+def summarize_uncertainty_for_beta(beta: float, d: int, T: int, save_dir: str = "results_experiments", alpha: float = 0.01):
     from plots_ts import load_runs 
     runs = load_runs(beta, d, save_dir)
     if runs is None:
@@ -728,7 +728,7 @@ def run_plot_final_regret_vs_beta_with_ci():
         save_dir="results_experiments",
         figdir="figures",
         fig_basename="regret_T200_vs_beta_with_ci",
-        alpha_ci=0.05,
+        alpha_ci=0.01,
         log_y=True,
     )
 
@@ -739,7 +739,7 @@ def run_plot_two_betas_with_ci():
         save_dir="results_experiments",
         figdir="figures",
         fig_basename="regret_b2_b4_with_ci",
-        alpha_ci=0.05,
+        alpha_ci=0.01,
         log_y=True,
     )
 
