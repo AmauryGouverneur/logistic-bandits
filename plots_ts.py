@@ -227,20 +227,26 @@ def _bound_ours(beta: float, d: int, T_vec: np.ndarray) -> np.ndarray:
 
 # ---------- plots ----------
 
-def _compute_ARME(all_runs: torch.Tensor, alpha: float = 0.01) -> float:
+def _compute_max_RME(all_runs: torch.Tensor, alpha: float = 0.01) -> float:
     """
     all_runs: (N, T) per-step regret.
-    Returns ARME (trajectory-averaged relative 99% margin of error), scalar in [0, inf).
+    Returns the MAX over t of the relative 99% CI half-width for cumulative regret:
+        max_t [ half_t / mean_t ], where half_t = z * SE_t and mean_t is the cumulative mean.
     """
     N, T = all_runs.shape
-    cum = all_runs.cumsum(dim=1)                 # (N,T)
-    mean = cum.mean(dim=0)                       # (T,)
-    sd   = cum.std(dim=0, unbiased=True)         # (T,)
-    se   = sd / math.sqrt(max(1, N))             # (T,)
+    cum  = all_runs.cumsum(dim=1)          # (N, T)
+    mean = cum.mean(dim=0)                 # (T,)
+    sd   = cum.std(dim=0, unbiased=True)   # (T,)
+    se   = sd / math.sqrt(max(1, N))       # (T,)
     z    = float(norm.ppf(1.0 - alpha/2.0))
-    half = z * se
-    denom = float(mean.sum().item())
-    return (float(half.sum().item()) / denom) if denom > 0 else float("nan")
+    half = z * se                          # (T,)
+
+    # Relative half-width per t; ignore non-positive means to avoid division issues.
+    rel = torch.where(mean > 0, half / mean, torch.nan)
+    # Return max ignoring NaNs
+    rel_max = torch.max(rel)
+    return float(rel_max.item())
+
 
 def plot_cumulative_regret_two_betas_with_ci(
     d: int = 10,
@@ -250,51 +256,41 @@ def plot_cumulative_regret_two_betas_with_ci(
     save_dir: str = "results_experiments",
     figdir: str = "figures",
     fig_basename: str = "regret_b2_b4_with_ci",
-    alpha_ci: float = 0.01,
+    alpha_ci: float = 0.01,    # 99% CI
     log_y: bool = True,
 ):
     """
-    Plot cumulative regret for two betas on the same plot:
-      - beta_solid: solid line
-      - beta_dashed: dashed line
-    Each with mean ± CI shaded region.
-    Also shows ARME (trajectory-averaged relative 99% margin of error) in its own legend.
-    Saves figures/<fig_basename>.png and .tex
+    Plot cumulative regret for two betas on the same plot with mean ± 99% CI.
+    Also shows Max RME (max over t of relative 99% CI half-width) for each curve
+    in its own legend placed above the mean/CI legend.
     """
     os.makedirs(figdir, exist_ok=True)
 
-    # Colors (fallbacks if not already defined in your file)
     global PURPLE
     if 'PURPLE' not in globals():
         PURPLE = (116/255, 72/255, 155/255)
 
-    # Load runs
-    runs_solid = load_runs(beta_solid, d, save_dir)
+    runs_solid  = load_runs(beta_solid,  d, save_dir)
     runs_dashed = load_runs(beta_dashed, d, save_dir)
     if runs_solid is None or runs_dashed is None:
         missing = []
-        if runs_solid is None:  missing.append(beta_solid)
+        if runs_solid  is None: missing.append(beta_solid)
         if runs_dashed is None: missing.append(beta_dashed)
         raise FileNotFoundError(f"No saved results for beta(s): {missing}")
 
-    # Match horizons (and clamp to requested T)
-    T_use = min(T, runs_solid.shape[1], runs_dashed.shape[1])
-    runs_solid  = runs_solid[:, :T_use]
+    T_use       = min(T, runs_solid.shape[1], runs_dashed.shape[1])
+    runs_solid  = runs_solid[:,  :T_use]
     runs_dashed = runs_dashed[:, :T_use]
 
-    # Cumulative means & CIs
     mean_solid,  lo_solid,  hi_solid  = _cum_stats(runs_solid)
     mean_dashed, lo_dashed, hi_dashed = _cum_stats(runs_dashed)
 
     x = np.arange(1, T_use + 1, dtype=float)
-
     fig, ax = plt.subplots(figsize=(7, 4.2))
 
-    # β_solid — solid line
-    ax.plot(x, mean_solid.cpu().numpy(), linestyle='-', color=PURPLE, linewidth=2.0)
-    ax.fill_between(x, lo_solid.cpu().numpy(), hi_solid.cpu().numpy(), alpha=0.20, color=PURPLE)
-
-    # β_dashed — dashed line
+    # Curves + CI
+    ax.plot(x, mean_solid.cpu().numpy(),  linestyle='-',  color=PURPLE, linewidth=2.0)
+    ax.fill_between(x, lo_solid.cpu().numpy(),  hi_solid.cpu().numpy(),  alpha=0.20, color=PURPLE)
     ax.plot(x, mean_dashed.cpu().numpy(), linestyle='--', color=PURPLE, linewidth=2.0)
     ax.fill_between(x, lo_dashed.cpu().numpy(), hi_dashed.cpu().numpy(), alpha=0.20, color=PURPLE)
 
@@ -304,15 +300,15 @@ def plot_cumulative_regret_two_betas_with_ci(
     ax.set_ylabel("Cumulative Regret" + (" (log scale)" if log_y else ""))
     ax.grid(True, which='both', linewidth=0.3, alpha=0.4)
 
-    # -------- Legend #1: which beta (line styles) --------
+    # Legend #1: which beta (line styles)
     handles_beta = [
         Line2D([0], [0], color=PURPLE, lw=2.0, linestyle='-',  label=fr"TS ($\beta={beta_solid}$)"),
         Line2D([0], [0], color=PURPLE, lw=2.0, linestyle='--', label=fr"TS ($\beta={beta_dashed}$)"),
     ]
     leg1 = ax.legend(handles=handles_beta, loc='upper left', frameon=True)
-    ax.add_artist(leg1)  # keep when adding more legends
+    ax.add_artist(leg1)
 
-    # -------- Legend #2: what styles mean (mean vs CI) --------
+    # Legend #2: mean vs CI
     mean_proxy = Line2D([0], [0], color=PURPLE, lw=2.0, linestyle='-')
     ci_proxy   = Patch(facecolor=PURPLE, alpha=0.20, edgecolor='none')
     leg2 = ax.legend(
@@ -323,23 +319,20 @@ def plot_cumulative_regret_two_betas_with_ci(
     )
     ax.add_artist(leg2)
 
-    # -------- ARME legend (#3): two text rows, no glyphs --------
-    arme_solid  = _compute_ARME(runs_solid,  alpha=alpha_ci) * 100.0
-    arme_dashed = _compute_ARME(runs_dashed, alpha=alpha_ci) * 100.0
-
-    # Create "text-only" handles by hiding the handle box
-    h_arme = [
+    # Legend #3: Max RME (per-β), text-only
+    max_rme_solid  = _compute_max_RME(runs_solid,  alpha=alpha_ci) * 100.0
+    max_rme_dashed = _compute_max_RME(runs_dashed, alpha=alpha_ci) * 100.0
+    h_rme = [
         Line2D([], [], linestyle='None', marker=None,
-               label=rf"ARME $(\beta={beta_solid})$: {arme_solid:.2f}%"),
+               label=rf"Max RME (99% CI), $\beta={beta_solid}$: {max_rme_solid:.2f}%"),
         Line2D([], [], linestyle='None', marker=None,
-               label=rf"ARME $(\beta={beta_dashed})$: {arme_dashed:.2f}%"),
+               label=rf"Max RME (99% CI), $\beta={beta_dashed}$: {max_rme_dashed:.2f}%"),
     ]
-    # Place just above legend #2; adjust y in bbox_to_anchor if you need a different spacing.
     leg3 = ax.legend(
-        handles=h_arme,
-        labels=[h.get_label() for h in h_arme],
+        handles=h_rme,
+        labels=[h.get_label() for h in h_rme],
         loc='lower right',
-        bbox_to_anchor=(1.0, 0.14),  # ↑ raise to sit above leg2 (tweak this if needed)
+        bbox_to_anchor=(1.0, 0.14),   # adjust to sit above Legend #2 if needed
         frameon=True,
         handlelength=0,
         handletextpad=0.0,
@@ -352,21 +345,24 @@ def plot_cumulative_regret_two_betas_with_ci(
     _save_png_and_tikz(fig_basename, figdir=figdir)
 
 
-def _compute_RME_T(all_runs: torch.Tensor, alpha: float = 0.01) -> float:
+# --- helper: max RME_T (same per-beta computation as before) ---
+def _compute_max_RME_T(all_runs: torch.Tensor, alpha: float = 0.01) -> float:
     """
-    all_runs: (N, T) per-step regret.
-    Returns RME_T (relative 99% margin of error at final horizon), scalar.
+    all_runs: (N, T) per-step regret (N runs).
+    Returns the relative (1 - alpha) margin of error at the final horizon T
+    for the mean cumulative regret, i.e., z * SE / mean, as a scalar.
+    (The 'max across betas' aggregation is handled in the plotting code.)
     """
     N, T = all_runs.shape
-    cum = all_runs.cumsum(dim=1)                 # (N,T)
-    mean_T = cum[:, -1].mean()                   # scalar
-    sd_T   = cum[:, -1].std(unbiased=True)       # scalar
-    se_T   = sd_T / math.sqrt(max(1, N))
+    cum   = all_runs.cumsum(dim=1)               # (N, T)
+    last  = cum[:, -1]                           # (N,)
+    mean_T = last.mean()                          # scalar
+    sd_T   = last.std(unbiased=True)              # scalar
+    se_T   = sd_T / math.sqrt(max(1, N))          # scalar
     z      = float(norm.ppf(1.0 - alpha/2.0))
     half_T = z * se_T
     denom  = float(mean_T.item())
     return (float(half_T.item()) / denom) if denom > 0 else float("nan")
-
 
 
 def plot_final_cumulative_regret_vs_beta_with_ci(
@@ -381,8 +377,8 @@ def plot_final_cumulative_regret_vs_beta_with_ci(
 ):
     """
     For each beta, load (num_exp, T) regrets, take cumulative at time T,
-    then plot mean ± CI vs beta. Also shows the Average RME_T in its own legend
-    placed just below the main legend (upper-right corner).
+    then plot mean ± CI vs beta. Also shows the **Max RME_T** (across betas)
+    in its own legend placed just below the main legend (upper-right corner).
     """
     os.makedirs(figdir, exist_ok=True)
 
@@ -411,8 +407,8 @@ def plot_final_cumulative_regret_vs_beta_with_ci(
         los.append(float(lo))
         his.append(float(hi))
 
-        # RME_T for this beta
-        rme_t_values.append(_compute_RME_T(runs, alpha=alpha_ci))
+        # RME_T for this beta (per-beta scalar)
+        rme_t_values.append(_compute_max_RME_T(runs, alpha=alpha_ci))
 
     if not beta_vals:
         print("Nothing to plot (no betas loaded).")
@@ -449,20 +445,19 @@ def plot_final_cumulative_regret_vs_beta_with_ci(
     leg_main = ax.legend(handles=main_handles, loc='upper right', frameon=True)
     ax.add_artist(leg_main)
 
-    # -------- Average RME_T legend (just below the main legend) --------
+    # -------- Max RME_T legend (just below the main legend) --------
     if rme_t_values:
-        avg_rme_t = float(np.nanmean(np.array(rme_t_values))) * 100.0
+        max_rme_t = float(np.nanmax(np.array(rme_t_values))) * 100.0
 
         # text-only handle so only the label shows
         rme_handle = Line2D([], [], linestyle='None', marker=None,
-                            label=rf"Average RME at T=200: {avg_rme_t:.2f}%")
-        # Place in lower-right *of its own bbox* and anchor that bbox
-        # slightly below the top-right corner. Tweak y=0.86 to adjust spacing.
+                            label=rf"Max RME at $T={T_effective}$: {max_rme_t:.2f}%")
+        # Place in lower-right of its own bbox and anchor slightly below the top-right corner.
         leg_rme = ax.legend(
             handles=[rme_handle],
             labels=[rme_handle.get_label()],
-            loc='lower right',            # as requested
-            bbox_to_anchor=(1.0, 0.72),   # just below main legend; nudge this if needed
+            loc='lower right',
+            bbox_to_anchor=(1.0, 0.72),   # nudge this to adjust spacing under main legend
             frameon=True,
             handlelength=0,
             handletextpad=0.0,
