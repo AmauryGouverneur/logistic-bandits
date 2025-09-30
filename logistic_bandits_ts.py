@@ -1,5 +1,3 @@
-# logistic_bandits_ts.py
-
 import os
 import math
 from typing import Optional
@@ -17,13 +15,8 @@ from mh_sphere import MHSphereSampler
 # ------------------------------- utils -------------------------------
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print(f"Using device: {device}")
 def_dtype = torch.float32
 
-def set_seed(seed: int = 0):
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
 
 def phi(x, beta):
     return torch.sigmoid(beta * x)
@@ -51,7 +44,7 @@ def run_logistic_bandits_TS_exp(
 ):
     """
     Run `num_exp` independent experiments in chunks of size `batch_size`,
-    with Metropolis-Hastings posterior sampling.
+    using Metropolis–Hastings posterior sampling.
 
     Saves per-run to:
       results_experiments/logistic_ts_all_beta_{beta}_d_{d}.pt   (num_exp, T)
@@ -100,7 +93,7 @@ def run_logistic_bandits_TS_exp(
         A_bt_d = torch.empty(B, 0, d, device=dev, dtype=dtype)   # (B, t, d)
         r_bt   = torch.empty(B, 0, device=dev, dtype=dtype)      # (B, t)
 
-        # Warm start (one interaction)
+        # Warm start with one interaction
         a0 = torch.randn(B, d, device=dev, dtype=dtype)
         a0 = a0 / a0.norm(dim=1, keepdim=True).clamp_min(1e-12)
         z0 = beta * (a0 * theta_star).sum(dim=1)

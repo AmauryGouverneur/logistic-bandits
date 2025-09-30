@@ -1,13 +1,13 @@
 # Thompson Sampling for Logistic Bandits
 
-This repo contains an of Thompson Sampling for **logistic bandits** where both the action set and parameter set are the unit sphere $S^{d-1}$. Posterior sampling is done with Metropolis–Hastings (MH) random walks on the sphere using von Mises–Fisher. We consider a synthetic logistic bandit with dimension $d=10$, horizon $T=200$, and logistic slope parameter $\beta\in[0.25,10]$. The action and parameter spaces are both the unit sphere, and the prior on $\Theta$ is uniform.
+This repo contains an implementation of Thompson Sampling for *logistic bandits* where both the action set and parameter set are the unit sphere $S^{d-1}$. Posterior sampling is done with Metropolis–Hastings (MH) random walks on the sphere using von Mises–Fisher proposals. We consider a synthetic logistic bandit with dimension $d=10$, horizon $T=200$, and logistic slope parameter $\beta\in[0.25,10]$. The action and parameter spaces are both the unit sphere, and the prior on $\Theta$ is uniform.
 
-We use this implementation to compare our new regret bound against prior bounds (Dong & Van Roy, 2019; Russo & Van Roy, 2014).
+We use this implementation to compare our new regret bound against prior bounds (*Dong & Van Roy, 2018; Russo & Van Roy, 2014*).
 
 ---
 
 ### Regret vs time with bounds ($\beta \in \{2,4\}$)
-Left plot: empirical cumulative regret (mean over runs) and two bounds.  
+Left plot: empirical cumulative regret (mean over runs) and **three** bounds.  
 Right plot: cumulative regret at $T=200$ vs $\beta$ with the same bounds.
 
 <p align="center">
@@ -16,20 +16,21 @@ Right plot: cumulative regret at $T=200$ vs $\beta$ with the same bounds.
 </p>
 
 **Commentary:**  
-The **left plot** shows the evolution of regret and two regret bounds for $\beta\in\{2,4\}$. Our bound is consistently tighter over the entire horizon and is less sensitive to increases in $\beta$. The **right plot** shows cumulative regret at $T = 200$ and as $\beta$ varies; our bound remains competitive across the full range and quickly becomes orders of magnitude smaller than alternatives for moderate/large $\beta$. In contrast, the compared bounds grow rapidly with and can become vacuous.
+The **left plot** shows the evolution of regret and three regret bounds for $\beta\in\{2,4\}$. Our bound is consistently tighter over the entire horizon and is less sensitive to increases in $\beta$. The **right plot** shows cumulative regret at $T = 200$ as $\beta$ varies; our bound remains competitive across the full range and quickly becomes orders of magnitude smaller than alternatives for moderate/large $\beta$. In contrast, the compared bounds grow rapidly with $\beta$ and can become vacuous.
 
-> Note: the 95% confidence intervals are very tight and not visually apparent on the bounded plots above. For completeness, we include CI versions:
+> Note: the 99% confidence intervals are very tight and often not visually apparent on the plots with bounds. For completeness, we include CI versions:
 
 <p align="center">
   <img src="figures/regret_b2_b4_with_ci.png" alt="Regret with CI for beta=2 and beta=4" width="48%">
   <img src="figures/regret_T200_vs_beta_with_ci.png" alt="Regret at T=200 vs beta with CI" width="48%">
 </p>
 
-We produce tikZ exports (`.tex`) for all figures. They can be found in the same `figures/` folder.
+We produce **TikZ** exports (`.tex`) for all figures. They can be found in the same `figures/` folder.
 
 ---
 
 ## Folder structure
+
 
 ```
 logistic-bandits/
@@ -44,21 +45,20 @@ logistic-bandits/
 └── .venv/                     # (optional) local virtual environment
 ```
 
+
 ### What the core files do
 - **`logistic_bandits_ts.py`**  
   Runs **Thompson Sampling** with the logistic likelihood. The results are saved in two files:
   - Per-run per-time regrets: `results_experiments/logistic_ts_all_beta_<β>_d_<d>.pt` (tensor (N,T)).
   - The average (mean over runs): `..._avg_...pt` (tensor (T,)).
 - **`plots_ts.py`**  
-  Loads saved results and produces the four figures above. It also exports TikZ via `matplot2tikz`.
+  Loads saved results and produces the four figures above. It also exports **TikZ** via `matplot2tikz`.
 - **`mh_sphere.py`**  
   Implements **MH on the sphere** with **vMF** random-walk proposals. We operate on shape $(B,K,d)$: $B$ experiments in parallel, each with $K$ chains, in $d$ dimensions. The proposal is
-  $$
-  \theta' \sim \mathrm{vMF}(\mu=\theta,\ \kappa),
-  $$
-  and we accept with $\min\{1, \exp(\log p(\theta') - \log p(\theta))\}$. The code runs entirely on CUDA when available.
-
-
+  \[
+    \theta' \sim \mathrm{vMF}(\mu=\theta,\ \kappa),
+  \]
+  and we accept with $\min\{1, \exp(\log p(\theta') - \log p(\theta))\}$. The code runs on CUDA when available.
 
 ---
 
@@ -92,7 +92,7 @@ matplotlib==3.7.5
 webcolors==1.13
 ```
 
-> If you only need PNGs, you can skip `matplotlib` and `webcolors`.
+> If you only need PNGs, you can skip `matplot2tikz` and `webcolors`.
 
 ---
 
@@ -104,22 +104,23 @@ This will run $N$ experiments per $\beta$, in batches, and save tensors under `r
 
 ```bash
 python - <<'PY'
+import numpy as np
 from logistic_bandits_ts import sweep_betas
 
 sweep_betas(
     betas=np.r_[0.25:4.0+0.25:0.25,  4.5:10.0+0.5:0.5].tolist(),
     d=10, T=200,
-    num_exp=100,           # number of independent runs per beta
-    batch_size=12,         # how many runs in parallel on GPU
-    chains=100,            # MH chains per run
-    mh_steps=10,           # MH steps per time round
-    append=True,           # append new runs if files already exist
+    num_exp=1024,           # number of independent runs per beta
+    batch_size=256,         # how many runs in parallel on GPU
+    chains=64,              # MH chains per run
+    mh_steps=16,            # MH steps per time round
+    append=True,            # append new runs if files already exist
     progress=True,
 )
 PY
 ```
 
-This can also be achieved by running ```python logistic_bandits_ts.py```. 
+You can also simply run: ```python logistic_bandits_ts.py```. 
 
 
 #### Make all the figures

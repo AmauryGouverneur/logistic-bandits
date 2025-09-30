@@ -1,6 +1,7 @@
 numpy
 matplotlib==3.7.5
 tqdm
+torch
 scipy
 matplot2tikz
 webcolors>=24.6

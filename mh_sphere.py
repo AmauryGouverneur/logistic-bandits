@@ -1,4 +1,3 @@
-# mh_sphere.py
 import torch
 from contextlib import nullcontext
 

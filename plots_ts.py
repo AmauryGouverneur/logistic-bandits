@@ -1,4 +1,3 @@
-# plots_ts.py
 import os
 import math
 from typing import Sequence, Tuple
@@ -10,7 +9,7 @@ from matplotlib.patches import Patch
 import numpy as np
 from scipy.stats import norm
 from scipy.optimize import minimize_scalar
-import matplot2tikz as tikzplotlib
+import matplot2tikz
 
 DARKORANGE = (255/255, 127/255, 14/255)      # darkorange25512714
 STEELBLUE = (31/255, 119/255, 180/255)      # steelblue31119180
@@ -81,7 +80,7 @@ def _save_png_and_tikz(fig_basename: str, figdir: str = "figures", dpi: int = 15
     png_path = os.path.join(figdir, f"{fig_basename}.png")
     tex_path = os.path.join(figdir, f"{fig_basename}.tex")
     plt.savefig(png_path, dpi=dpi, bbox_inches="tight")
-    tikzplotlib.save(tex_path)
+    matplot2tikz.save(tex_path)
     print(f"Saved: {png_path}\nSaved: {tex_path}")
 
 # ---------- bounds ----------
@@ -114,10 +113,10 @@ def _delta_beta(beta):
 def _bound_russo_van_roy(beta: float, d: int, T, gamma: float = 1.0,
                                  C: float = 1.0, sigma: float = 0.5, dimK: int | None = None):
     """
-    Explicit TS regret upper bound for logistic bandits (Russo & Van Roy, Propositon 10 + Propositon 12),
+    Explicit TS regret upper bound for logistic bandits (Russo & Van Roy, Proposition 10 + Proposition 12),
     specialized with C=1 (Bernoulli rewards), sigma=1/2, and dimK(F) ≤ d by default.
 
-    R(T) <= 1+ (dimE(F,T^{-1}) + 1) C + 16 σ sqrt(dimE(F,T^{-1})*(1 + o(1) + dimK)log(T)T
+    R(T) <= 1+ (dimE(F,T^{-1}) + 1) C + 16 σ sqrt(dimE(F,T^{-1})*(1 + o(1) + dimK)log(T)T)
 
     Parameters
     ----------
@@ -159,7 +158,7 @@ def _bound_russo_van_roy(beta: float, d: int, T, gamma: float = 1.0,
 
 def _bound_dong_van_roy(beta: float, d: int, T_vec: np.ndarray) -> np.ndarray:
     """
-    Dong & Van Roy (2018) as a function of T (vectorized).
+    Dong & Van Roy (2019) as a function of T (vectorized).
 
     Let ε(T) = d (1+e^β)^2 / (4 e^β √(2T)).
 
@@ -213,10 +212,9 @@ def _bound_ours(beta: float, d: int, T_vec: np.ndarray) -> np.ndarray:
     r_log = pref * np.sqrt(T_vec * np.log(inside_log))
 
     # epsilon(T) for small values of (T beta^2) / (2d)
-    eps_small = ((2.0* d)/( 3.0*T_vec *beta**2 ))**(2/5)  # not used directly
+    eps_small = ((2.0* d)/( 3.0*T_vec *beta**2 ))**(2/5)  
     r_log_small = 2.0 / delta* np.sqrt(d*T_vec * (d * np.log(1+2.0/eps_small)+1/2*eps_small**2*beta**2*T_vec)) 
 
-    # branch: 
     r_quad = pref * np.sqrt(T_vec * (1.0 + 0.5 * (beta**2) * T_vec))
 
     r_log = np.where(eps < 1.0, r_log, r_quad)
@@ -265,10 +263,6 @@ def plot_cumulative_regret_two_betas_with_ci(
     in its own legend placed above the mean/CI legend.
     """
     os.makedirs(figdir, exist_ok=True)
-
-    global PURPLE
-    if 'PURPLE' not in globals():
-        PURPLE = (116/255, 72/255, 155/255)
 
     runs_solid  = load_runs(beta_solid,  d, save_dir)
     runs_dashed = load_runs(beta_dashed, d, save_dir)
@@ -486,7 +480,7 @@ def plot_cumulative_regret_with_bounds_two_betas(
       - β=2.0: Thompson Sampling + bounds (solid lines)
       - β=4.0: Thompson Sampling + bounds (dashed lines)
     Colors:
-      - Dong & Van Roy (2018) bound: steel blue
+      - Dong & Van Roy (2019) bound: steel blue
       - Our bound: forest green
       - Empirical TS mean: purple
     Grid: light gray, behind the curves.
@@ -558,7 +552,7 @@ def plot_cumulative_regret_with_bounds_two_betas(
     plt.plot([xT], [b2_dvr[-1]],    marker='D', mfc='none', mec=STEELBLUE, mew=1.5, ms=ms, linestyle='None')
     plt.plot([xT], [b2_ours[-1]],   marker='D', mfc='none', mec=FORESTGRN, mew=1.5, ms=ms, linestyle='None')
 
-    # --- after you've drawn all six curves and the hollow markers ---
+    # --- Legends ---
 
     ax = plt.gca()
 
@@ -566,7 +560,7 @@ def plot_cumulative_regret_with_bounds_two_betas(
     color_handles = [
         Line2D([0], [0], color=PURPLE,    lw=2.0, linestyle='-', label="Thompson Sampling"),
         Line2D([0], [0], color=DARKORANGE, lw=2.0, linestyle='-', label="Russo & Van Roy (2014)"),
-        Line2D([0], [0], color=STEELBLUE, lw=2.0, linestyle='-', label="Dong & Van Roy (2018)"),
+        Line2D([0], [0], color=STEELBLUE, lw=2.0, linestyle='-', label="Dong & Van Roy (2019)"),
         Line2D([0], [0], color=FORESTGRN, lw=2.0, linestyle='-', label="This paper"),
     ]
     leg_colors = ax.legend(handles=color_handles, loc="lower right",
@@ -686,7 +680,7 @@ def plot_final_regret_vs_beta_with_bounds(
     color_handles = [
         Line2D([0], [0], color=PURPLE,    lw=2.0, linestyle='-', label="Thompson Sampling"),
         Line2D([0], [0], color=DARKORANGE, lw=1.8, linestyle='-', label="Russo & Van Roy (2014)"),
-        Line2D([0], [0], color=STEELBLUE, lw=1.8, linestyle='-', label="Dong & Van Roy (2018)"),
+        Line2D([0], [0], color=STEELBLUE, lw=1.8, linestyle='-', label="Dong & Van Roy (2019)"),
         Line2D([0], [0], color=FORESTGRN, lw=1.8, linestyle='-', label="This paper"),
     ]
     leg_colors = ax.legend(handles=color_handles, loc="upper left",
