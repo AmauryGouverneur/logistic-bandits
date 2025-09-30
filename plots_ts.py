@@ -84,7 +84,6 @@ def _save_png_and_tikz(fig_basename: str, figdir: str = "figures", dpi: int = 15
     tikzplotlib.save(tex_path)
     print(f"Saved: {png_path}\nSaved: {tex_path}")
 
-
 # ---------- bounds ----------
 
 def sigmoid(z):
@@ -228,7 +227,20 @@ def _bound_ours(beta: float, d: int, T_vec: np.ndarray) -> np.ndarray:
 
 # ---------- plots ----------
 
-
+def _compute_ARME(all_runs: torch.Tensor, alpha: float = 0.05) -> float:
+    """
+    all_runs: (N, T) per-step regret.
+    Returns ARME (trajectory-averaged relative 95% margin of error), scalar in [0, inf).
+    """
+    N, T = all_runs.shape
+    cum = all_runs.cumsum(dim=1)                 # (N,T)
+    mean = cum.mean(dim=0)                       # (T,)
+    sd   = cum.std(dim=0, unbiased=True)         # (T,)
+    se   = sd / math.sqrt(max(1, N))             # (T,)
+    z    = float(norm.ppf(1.0 - alpha/2.0))
+    half = z * se
+    denom = float(mean.sum().item())
+    return (float(half.sum().item()) / denom) if denom > 0 else float("nan")
 
 def plot_cumulative_regret_two_betas_with_ci(
     d: int = 10,
@@ -246,11 +258,17 @@ def plot_cumulative_regret_two_betas_with_ci(
       - beta_solid: solid line
       - beta_dashed: dashed line
     Each with mean ± CI shaded region.
+    Also shows ARME (trajectory-averaged relative 95% margin of error) in its own legend.
     Saves figures/<fig_basename>.png and .tex
     """
     os.makedirs(figdir, exist_ok=True)
 
-    # Load runs (expects your load_runs + _cum_stats utils)
+    # Colors (fallbacks if not already defined in your file)
+    global PURPLE
+    if 'PURPLE' not in globals():
+        PURPLE = (116/255, 72/255, 155/255)
+
+    # Load runs
     runs_solid = load_runs(beta_solid, d, save_dir)
     runs_dashed = load_runs(beta_dashed, d, save_dir)
     if runs_solid is None or runs_dashed is None:
@@ -283,7 +301,7 @@ def plot_cumulative_regret_two_betas_with_ci(
     if log_y:
         ax.set_yscale('log')
     ax.set_xlabel("T")
-    ax.set_ylabel("Regret" + (" (log scale)" if log_y else ""))
+    ax.set_ylabel("Cumulative Regret" + (" (log scale)" if log_y else ""))
     ax.grid(True, which='both', linewidth=0.3, alpha=0.4)
 
     # -------- Legend #1: which beta (line styles) --------
@@ -292,7 +310,7 @@ def plot_cumulative_regret_two_betas_with_ci(
         Line2D([0], [0], color=PURPLE, lw=2.0, linestyle='--', label=fr"TS ($\beta={beta_dashed}$)"),
     ]
     leg1 = ax.legend(handles=handles_beta, loc='upper left', frameon=True)
-    ax.add_artist(leg1)  # keep when adding second legend
+    ax.add_artist(leg1)  # keep when adding more legends
 
     # -------- Legend #2: what styles mean (mean vs CI) --------
     mean_proxy = Line2D([0], [0], color=PURPLE, lw=2.0, linestyle='-')
@@ -303,9 +321,51 @@ def plot_cumulative_regret_two_betas_with_ci(
         loc='lower right',
         frameon=True,
     )
+    ax.add_artist(leg2)
+
+    # -------- ARME legend (#3): two text rows, no glyphs --------
+    arme_solid  = _compute_ARME(runs_solid,  alpha=alpha_ci) * 100.0
+    arme_dashed = _compute_ARME(runs_dashed, alpha=alpha_ci) * 100.0
+
+    # Create "text-only" handles by hiding the handle box
+    h_arme = [
+        Line2D([], [], linestyle='None', marker=None,
+               label=rf"ARME $(\beta={beta_solid})$: {arme_solid:.2f}%"),
+        Line2D([], [], linestyle='None', marker=None,
+               label=rf"ARME $(\beta={beta_dashed})$: {arme_dashed:.2f}%"),
+    ]
+    # Place just above legend #2; adjust y in bbox_to_anchor if you need a different spacing.
+    leg3 = ax.legend(
+        handles=h_arme,
+        labels=[h.get_label() for h in h_arme],
+        loc='lower right',
+        bbox_to_anchor=(1.0, 0.14),  # ↑ raise to sit above leg2 (tweak this if needed)
+        frameon=True,
+        handlelength=0,
+        handletextpad=0.0,
+        borderpad=0.6,
+        labelspacing=0.6,
+    )
+    ax.add_artist(leg3)
 
     plt.tight_layout()
     _save_png_and_tikz(fig_basename, figdir=figdir)
+
+
+def _compute_RME_T(all_runs: torch.Tensor, alpha: float = 0.05) -> float:
+    """
+    all_runs: (N, T) per-step regret.
+    Returns RME_T (relative 95% margin of error at final horizon), scalar.
+    """
+    N, T = all_runs.shape
+    cum = all_runs.cumsum(dim=1)                 # (N,T)
+    mean_T = cum[:, -1].mean()                   # scalar
+    sd_T   = cum[:, -1].std(unbiased=True)       # scalar
+    se_T   = sd_T / math.sqrt(max(1, N))
+    z      = float(norm.ppf(1.0 - alpha/2.0))
+    half_T = z * se_T
+    denom  = float(mean_T.item())
+    return (float(half_T.item()) / denom) if denom > 0 else float("nan")
 
 
 
@@ -321,19 +381,42 @@ def plot_final_cumulative_regret_vs_beta_with_ci(
 ):
     """
     For each beta, load (num_exp, T) regrets, take cumulative at time T,
-    then plot mean ± CI vs beta. y-axis log if log_y=True.
-    Saves figures/<fig_basename>.png and .tex
+    then plot mean ± CI vs beta. Also shows the Average RME_T in its own legend
+    placed just below the main legend (upper-right corner).
     """
+    os.makedirs(figdir, exist_ok=True)
+
+    # Colors fallback
+    global PURPLE
+    if 'PURPLE' not in globals():
+        PURPLE = (116/255, 72/255, 155/255)
+
     beta_vals, means, los, his = [], [], [], []
+    rme_t_values, t_used_list = [], []
+
     for b in betas:
         runs = load_runs(float(b), d, save_dir)
+        if runs is None:
+            continue
         T_use = min(T, runs.shape[1])
-        cum_T = runs[:, :T_use].cumsum(dim=1)[:, -1].to(dtype=torch.float64)
+        t_used_list.append(T_use)
+        runs = runs[:, :T_use]
+
+        # CI at T
+        cum_T = runs.cumsum(dim=1)[:, -1].to(dtype=torch.float64)
         m, lo, hi = _ci_1d(cum_T.cpu(), alpha=alpha_ci)
+
         beta_vals.append(float(b))
         means.append(float(m))
         los.append(float(lo))
         his.append(float(hi))
+
+        # RME_T for this beta
+        rme_t_values.append(_compute_RME_T(runs, alpha=alpha_ci))
+
+    if not beta_vals:
+        print("Nothing to plot (no betas loaded).")
+        return
 
     import numpy as np
     beta_np = np.array(beta_vals, dtype=float)
@@ -341,18 +424,55 @@ def plot_final_cumulative_regret_vs_beta_with_ci(
     lo_np   = np.array(los, dtype=float)
     hi_np   = np.array(his, dtype=float)
 
-    plt.figure(figsize=(7, 4.2))
-    plt.plot(beta_np, mean_np, linestyle='-', label=f"Thompson Sampling (mean)", color=PURPLE, linewidth=2.0)
-    plt.fill_between(beta_np, lo_np, hi_np, alpha=0.20, label=f"{int((1-alpha_ci)*100)}% CI", color=PURPLE)
+    fig, ax = plt.subplots(figsize=(7, 4.2))
+    line_label = "Thompson Sampling (mean)"
+    ci_label   = f"{int((1-alpha_ci)*100)}% CI"
+
+    # main curve + CI
+    ax.plot(beta_np, mean_np, linestyle='-', label=line_label, color=PURPLE, linewidth=2.0)
+    ax.fill_between(beta_np, lo_np, hi_np, alpha=0.20, label=ci_label, color=PURPLE)
+
     if log_y:
-        plt.yscale('log')
-    plt.xlabel(r"$\beta$")
-    plt.ylabel(f"Regret at T={T}" + (" (log scale)" if log_y else ""))
-    plt.grid(True, which='both', linewidth=0.3, alpha=0.4)
-    plt.legend()
+        ax.set_yscale('log')
+
+    # Label T using the effective horizon actually used across betas
+    T_effective = int(min(t_used_list)) if t_used_list else T
+    ax.set_xlabel(r"$\beta$")
+    ax.set_ylabel(f"Cumulative regret at T={T_effective}" + (" (log scale)" if log_y else ""))
+    ax.grid(True, which='both', linewidth=0.3, alpha=0.4)
+
+    # -------- Main legend (upper right) --------
+    main_handles = [
+        Line2D([0], [0], color=PURPLE, lw=2.0, linestyle='-', label=line_label),
+        Patch(facecolor=PURPLE, alpha=0.20, edgecolor='none', label=ci_label),
+    ]
+    leg_main = ax.legend(handles=main_handles, loc='upper right', frameon=True)
+    ax.add_artist(leg_main)
+
+    # -------- Average RME_T legend (just below the main legend) --------
+    if rme_t_values:
+        avg_rme_t = float(np.nanmean(np.array(rme_t_values))) * 100.0
+
+        # text-only handle so only the label shows
+        rme_handle = Line2D([], [], linestyle='None', marker=None,
+                            label=rf"Average RME at T=200: {avg_rme_t:.2f}%")
+        # Place in lower-right *of its own bbox* and anchor that bbox
+        # slightly below the top-right corner. Tweak y=0.86 to adjust spacing.
+        leg_rme = ax.legend(
+            handles=[rme_handle],
+            labels=[rme_handle.get_label()],
+            loc='lower right',            # as requested
+            bbox_to_anchor=(1.0, 0.72),   # just below main legend; nudge this if needed
+            frameon=True,
+            handlelength=0,
+            handletextpad=0.0,
+            borderpad=0.6,
+            labelspacing=0.6,
+        )
+        ax.add_artist(leg_rme)
+
     plt.tight_layout()
     _save_png_and_tikz(fig_basename, figdir=figdir)
-
 
 
 
@@ -581,6 +701,22 @@ def plot_final_regret_vs_beta_with_bounds(
 
     plt.tight_layout()
     _save_png_and_tikz(fig_basename, figdir=figdir)
+
+# ---------- confidence interval statistics ----------
+
+
+def summarize_uncertainty_for_beta(beta: float, d: int, T: int, save_dir: str = "results_experiments", alpha: float = 0.05):
+    from plots_ts import load_runs 
+    runs = load_runs(beta, d, save_dir)
+    if runs is None:
+        raise FileNotFoundError(f"No saved runs for beta={beta}, d={d} in {save_dir}")
+    T_use = min(T, runs.shape[1])
+    runs = runs[:, :T_use]
+    ARME, RME_T = compute_cumreg_uncertainty_metrics(runs, alpha=alpha)
+    # Print as percentages for readability
+    print(f"β={beta}, d={d}, T={T_use}:  ARME={100*ARME:.2f}%   RME_T={100*RME_T:.2f}%")
+    return ARME, RME_T
+
 
 # ---------- convenience wrappers ----------
 

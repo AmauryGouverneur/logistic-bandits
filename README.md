@@ -109,9 +109,9 @@ from logistic_bandits_ts import sweep_betas
 sweep_betas(
     betas=np.r_[0.25:4.0+0.25:0.25,  4.5:10.0+0.5:0.5].tolist(),
     d=10, T=200,
-    num_exp=120,           # number of independent runs per beta
+    num_exp=100,           # number of independent runs per beta
     batch_size=12,         # how many runs in parallel on GPU
-    chains=192,            # MH chains per run
+    chains=100,            # MH chains per run
     mh_steps=10,           # MH steps per time round
     append=True,           # append new runs if files already exist
     progress=True,
