@@ -17,6 +17,8 @@ FORESTGRN = (44/255, 160/255,  44/255)      # forestgreen4416044
 PURPLE    = (116/255, 72/255, 155/255)      # purple11672155
 LIGHTGRAY = (204/255, 204/255, 204/255)     # lightgray204204204
 DARK      = (0.15, 0.15, 0.15)
+BURGUNDY = (153/255, 0/255, 51/255)
+
 
 
 # ---------- basic stats ----------
@@ -37,17 +39,32 @@ def mean_and_ci(all_runs: torch.Tensor, alpha: float = 0.01) -> Tuple[torch.Tens
 
 # ---------- load saved runs ----------
 
-def load_runs(beta: float, d: int, save_dir: str = "results_experiments") -> torch.Tensor:
+def load_runs(beta: float, d: int, method: str = "ts", save_dir: str = "results_experiments") -> torch.Tensor:
     """
-    Load per-experiment regrets. Prefers *_batched.pt, falls back to plain.
-    Returns CPU tensor of shape (num_exp, T). Raises FileNotFoundError if missing.
+    Load per-experiment per-step regrets for a method in {"ts","evds"}.
+    Returns CPU tensor of shape (num_exp, T).
     """
-    path_batched = os.path.join(save_dir, f"logistic_ts_all_beta_{beta}_d_{d}_batched.pt")
-    path_plain   = os.path.join(save_dir, f"logistic_ts_all_beta_{beta}_d_{d}.pt")
-    path = path_batched if os.path.exists(path_batched) else path_plain
-    if not os.path.exists(path):
-        raise FileNotFoundError(f"No saved runs for beta={beta} (looked for {path_batched} and {path_plain})")
-    return torch.load(path, map_location="cpu")
+    method = method.lower()
+    # New naming convention from logistic_bandits_ts_evds.py
+    path_new = os.path.join(save_dir, f"logistic_{method}_all_beta_{beta}_d_{d}.pt")
+
+    # Backward compat: your old TS file naming (if you still have it)
+    path_old_plain = os.path.join(save_dir, f"logistic_ts_all_beta_{beta}_d_{d}.pt")
+    path_old_batched = os.path.join(save_dir, f"logistic_ts_all_beta_{beta}_d_{d}_batched.pt")
+
+    if os.path.exists(path_new):
+        return torch.load(path_new, map_location="cpu")
+
+    if method == "ts":
+        path = path_old_batched if os.path.exists(path_old_batched) else path_old_plain
+        if os.path.exists(path):
+            return torch.load(path, map_location="cpu")
+
+    raise FileNotFoundError(
+        f"No saved runs for method={method}, beta={beta}, d={d}. "
+        f"Looked for {path_new}" + (f", {path_old_batched}, {path_old_plain}" if method == "ts" else "")
+    )
+
 
 
 # ---------- helpers ----------
@@ -249,94 +266,91 @@ def _compute_max_RME(all_runs: torch.Tensor, alpha: float = 0.01) -> float:
 def plot_cumulative_regret_two_betas_with_ci(
     d: int = 10,
     T: int = 200,
-    beta_solid: float = 2.0,   # solid line
-    beta_dashed: float = 4.0,  # dashed line
+    beta_solid: float = 2.0,
+    beta_dashed: float = 4.0,
     save_dir: str = "results_experiments",
     figdir: str = "figures",
     fig_basename: str = "regret_b2_b4_with_ci",
-    alpha_ci: float = 0.01,    # 99% CI
+    alpha_ci: float = 0.01,
     log_y: bool = True,
 ):
-    """
-    Plot cumulative regret for two betas on the same plot with mean ± 99% CI.
-    Also shows Max RME (max over t of relative 99% CI half-width) for each curve
-    in its own legend placed above the mean/CI legend.
-    """
     os.makedirs(figdir, exist_ok=True)
 
-    runs_solid  = load_runs(beta_solid,  d, save_dir)
-    runs_dashed = load_runs(beta_dashed, d, save_dir)
-    if runs_solid is None or runs_dashed is None:
-        missing = []
-        if runs_solid  is None: missing.append(beta_solid)
-        if runs_dashed is None: missing.append(beta_dashed)
-        raise FileNotFoundError(f"No saved results for beta(s): {missing}")
+    methods = [
+        ("ts",       PURPLE,    "TS"),
+        ("evds",     STEELBLUE, "EVDS"),
+        ("ids_2p",  FORESTGRN, "IDS_2P"),
+        ("ids",      BURGUNDY,  "IDS"),
+    ]
 
-    T_use       = min(T, runs_solid.shape[1], runs_dashed.shape[1])
-    runs_solid  = runs_solid[:,  :T_use]
-    runs_dashed = runs_dashed[:, :T_use]
 
-    mean_solid,  lo_solid,  hi_solid  = _cum_stats(runs_solid)
-    mean_dashed, lo_dashed, hi_dashed = _cum_stats(runs_dashed)
+    # Load all runs
+    data = {}
+    for m, _, _ in methods:
+        try:
+            data[m] = {
+                "solid":  load_runs(beta_solid,  d, method=m, save_dir=save_dir),
+                "dashed": load_runs(beta_dashed, d, method=m, save_dir=save_dir),
+            }
+        except FileNotFoundError:
+            continue
+
+    if not data:
+        print("No data found.")
+        return
+
+    # Horizon alignment
+    T_use = min(
+        T,
+        *[v["solid"].shape[1] for v in data.values()],
+        *[v["dashed"].shape[1] for v in data.values()],
+    )
 
     x = np.arange(1, T_use + 1, dtype=float)
     fig, ax = plt.subplots(figsize=(7, 4.2))
 
-    # Curves + CI
-    ax.plot(x, mean_solid.cpu().numpy(),  linestyle='-',  color=PURPLE, linewidth=2.0)
-    ax.fill_between(x, lo_solid.cpu().numpy(),  hi_solid.cpu().numpy(),  alpha=0.20, color=PURPLE)
-    ax.plot(x, mean_dashed.cpu().numpy(), linestyle='--', color=PURPLE, linewidth=2.0)
-    ax.fill_between(x, lo_dashed.cpu().numpy(), hi_dashed.cpu().numpy(), alpha=0.20, color=PURPLE)
+    for m, color, label in methods:
+        if m not in data:
+            continue
+
+        runs_s = data[m]["solid"][:, :T_use]
+        runs_d = data[m]["dashed"][:, :T_use]
+
+        mean_s, lo_s, hi_s = _cum_stats(runs_s)
+        mean_d, lo_d, hi_d = _cum_stats(runs_d)
+
+        ax.plot(x, mean_s.cpu(), linestyle='-',  color=color, linewidth=2.0)
+        ax.fill_between(x, lo_s.cpu(), hi_s.cpu(), alpha=0.15, color=color)
+
+        ax.plot(x, mean_d.cpu(), linestyle='--', color=color, linewidth=2.0)
+        ax.fill_between(x, lo_d.cpu(), hi_d.cpu(), alpha=0.15, color=color)
 
     if log_y:
         ax.set_yscale('log')
+
     ax.set_xlabel("T")
     ax.set_ylabel("Cumulative Regret" + (" (log scale)" if log_y else ""))
     ax.grid(True, which='both', linewidth=0.3, alpha=0.4)
 
-    # Legend #1: which beta (line styles)
-    handles_beta = [
-        Line2D([0], [0], color=PURPLE, lw=2.0, linestyle='-',  label=fr"TS ($\beta={beta_solid}$)"),
-        Line2D([0], [0], color=PURPLE, lw=2.0, linestyle='--', label=fr"TS ($\beta={beta_dashed}$)"),
+    # Legend: method (color)
+    handles_method = [
+        Line2D([0], [0], color=color, lw=2.0, linestyle='-', label=label)
+        for _, color, label in methods if _ in data
     ]
-    leg1 = ax.legend(handles=handles_beta, loc='upper left', frameon=True)
+    leg1 = ax.legend(handles=handles_method, loc='upper left', frameon=True)
     ax.add_artist(leg1)
 
-    # Legend #2: mean vs CI
-    mean_proxy = Line2D([0], [0], color=PURPLE, lw=2.0, linestyle='-')
-    ci_proxy   = Patch(facecolor=PURPLE, alpha=0.20, edgecolor='none')
-    leg2 = ax.legend(
-        handles=[mean_proxy, ci_proxy],
-        labels=["Mean", f"{int((1 - alpha_ci)*100)}% CI (shaded)"],
-        loc='lower right',
-        frameon=True,
-    )
-    ax.add_artist(leg2)
-
-    # Legend #3: Max RME (per-β), text-only
-    max_rme_solid  = _compute_max_RME(runs_solid,  alpha=alpha_ci) * 100.0
-    max_rme_dashed = _compute_max_RME(runs_dashed, alpha=alpha_ci) * 100.0
-    h_rme = [
-        Line2D([], [], linestyle='None', marker=None,
-               label=rf"Max RME (99% CI), $\beta={beta_solid}$: {max_rme_solid:.2f}%"),
-        Line2D([], [], linestyle='None', marker=None,
-               label=rf"Max RME (99% CI), $\beta={beta_dashed}$: {max_rme_dashed:.2f}%"),
+    # Legend: beta (linestyle)
+    handles_beta = [
+        Line2D([0], [0], color=DARK, lw=2.0, linestyle='-',  label=rf"$\beta={beta_solid}$"),
+        Line2D([0], [0], color=DARK, lw=2.0, linestyle='--', label=rf"$\beta={beta_dashed}$"),
     ]
-    leg3 = ax.legend(
-        handles=h_rme,
-        labels=[h.get_label() for h in h_rme],
-        loc='lower right',
-        bbox_to_anchor=(1.0, 0.14),   # adjust to sit above Legend #2 if needed
-        frameon=True,
-        handlelength=0,
-        handletextpad=0.0,
-        borderpad=0.6,
-        labelspacing=0.6,
-    )
-    ax.add_artist(leg3)
+    ax.legend(handles=handles_beta, loc='upper center', frameon=True)
 
     plt.tight_layout()
     _save_png_and_tikz(fig_basename, figdir=figdir)
+
+
 
 
 # --- helper: max RME_T (same per-beta computation as before) ---
@@ -358,9 +372,8 @@ def _compute_max_RME_T(all_runs: torch.Tensor, alpha: float = 0.01) -> float:
     denom  = float(mean_T.item())
     return (float(half_T.item()) / denom) if denom > 0 else float("nan")
 
-
 def plot_final_cumulative_regret_vs_beta_with_ci(
-    betas: Sequence[float] = (0.25, 0.5, 1.0, 1.5, 2.0, *range(3, 11)),
+    betas,
     d: int = 10,
     T: int = 200,
     save_dir: str = "results_experiments",
@@ -369,99 +382,63 @@ def plot_final_cumulative_regret_vs_beta_with_ci(
     alpha_ci: float = 0.01,
     log_y: bool = True,
 ):
-    """
-    For each beta, load (num_exp, T) regrets, take cumulative at time T,
-    then plot mean ± CI vs beta. Also shows the **Max RME_T** (across betas)
-    in its own legend placed just below the main legend (upper-right corner).
-    """
     os.makedirs(figdir, exist_ok=True)
 
-    # Colors fallback
-    global PURPLE
-    if 'PURPLE' not in globals():
-        PURPLE = (116/255, 72/255, 155/255)
+    methods = [
+        ("ts",       PURPLE,    "TS"),
+        ("evds",     STEELBLUE, "EVDS"),
+        ("ids_2p",  FORESTGRN, "IDS_2P"),
+        ("ids",      BURGUNDY,  "IDS"),
+    ]
 
-    beta_vals, means, los, his = [], [], [], []
-    rme_t_values, t_used_list = [], []
-
-    for b in betas:
-        runs = load_runs(float(b), d, save_dir)
-        if runs is None:
-            continue
-        T_use = min(T, runs.shape[1])
-        t_used_list.append(T_use)
-        runs = runs[:, :T_use]
-
-        # CI at T
-        cum_T = runs.cumsum(dim=1)[:, -1].to(dtype=torch.float64)
-        m, lo, hi = _ci_1d(cum_T.cpu(), alpha=alpha_ci)
-
-        beta_vals.append(float(b))
-        means.append(float(m))
-        los.append(float(lo))
-        his.append(float(hi))
-
-        # RME_T for this beta (per-beta scalar)
-        rme_t_values.append(_compute_max_RME_T(runs, alpha=alpha_ci))
-
-    if not beta_vals:
-        print("Nothing to plot (no betas loaded).")
-        return
-
-    import numpy as np
-    beta_np = np.array(beta_vals, dtype=float)
-    mean_np = np.array(means, dtype=float)
-    lo_np   = np.array(los, dtype=float)
-    hi_np   = np.array(his, dtype=float)
 
     fig, ax = plt.subplots(figsize=(7, 4.2))
-    line_label = "Thompson Sampling (mean)"
-    ci_label   = f"{int((1-alpha_ci)*100)}% CI"
 
-    # main curve + CI
-    ax.plot(beta_np, mean_np, linestyle='-', label=line_label, color=PURPLE, linewidth=2.0)
-    ax.fill_between(beta_np, lo_np, hi_np, alpha=0.20, label=ci_label, color=PURPLE)
+    for m, color, label in methods:
+        beta_vals, means, los, his = [], [], [], []
+
+        for b in betas:
+            try:
+                runs = load_runs(float(b), d, method=m, save_dir=save_dir)
+            except FileNotFoundError:
+                continue
+
+            T_use = min(T, runs.shape[1])
+            cum_T = runs[:, :T_use].cumsum(dim=1)[:, -1]
+            mean_T, lo_T, hi_T = _ci_1d(cum_T.cpu(), alpha=alpha_ci)
+
+            beta_vals.append(float(b))
+            means.append(float(mean_T))
+            los.append(float(lo_T))
+            his.append(float(hi_T))
+
+        if not beta_vals:
+            continue
+
+        beta_np = np.array(beta_vals)
+        idx = np.argsort(beta_np)
+
+        ax.plot(beta_np[idx], np.array(means)[idx],
+                color=color, linewidth=2.0, label=f"{label} (mean)")
+
+        ax.fill_between(beta_np[idx],
+                        np.array(los)[idx],
+                        np.array(his)[idx],
+                        alpha=0.15, color=color)
 
     if log_y:
         ax.set_yscale('log')
 
-    # Label T using the effective horizon actually used across betas
-    T_effective = int(min(t_used_list)) if t_used_list else T
     ax.set_xlabel(r"$\beta$")
-    ax.set_ylabel(f"Cumulative regret at T={T_effective}" + (" (log scale)" if log_y else ""))
+    ax.set_ylabel(f"Cumulative regret at T={T}" + (" (log scale)" if log_y else ""))
     ax.grid(True, which='both', linewidth=0.3, alpha=0.4)
 
-    # -------- Main legend (upper right) --------
-    main_handles = [
-        Line2D([0], [0], color=PURPLE, lw=2.0, linestyle='-', label=line_label),
-        Patch(facecolor=PURPLE, alpha=0.20, edgecolor='none', label=ci_label),
-    ]
-    leg_main = ax.legend(handles=main_handles, loc='upper right', frameon=True)
-    ax.add_artist(leg_main)
-
-    # -------- Max RME_T legend (just below the main legend) --------
-    if rme_t_values:
-        max_rme_t = float(np.nanmax(np.array(rme_t_values))) * 100.0
-
-        # text-only handle so only the label shows
-        rme_handle = Line2D([], [], linestyle='None', marker=None,
-                            label=rf"Max RME at $T={T_effective}$: {max_rme_t:.2f}%")
-        # Place in lower-right of its own bbox and anchor slightly below the top-right corner.
-        leg_rme = ax.legend(
-            handles=[rme_handle],
-            labels=[rme_handle.get_label()],
-            loc='lower right',
-            bbox_to_anchor=(1.0, 0.72),   # nudge this to adjust spacing under main legend
-            frameon=True,
-            handlelength=0,
-            handletextpad=0.0,
-            borderpad=0.6,
-            labelspacing=0.6,
-        )
-        ax.add_artist(leg_rme)
+    ax.legend(loc="upper right", frameon=True)
 
     plt.tight_layout()
     _save_png_and_tikz(fig_basename, figdir=figdir)
+
+
 
 
 
@@ -691,21 +668,6 @@ def plot_final_regret_vs_beta_with_bounds(
     plt.tight_layout()
     _save_png_and_tikz(fig_basename, figdir=figdir)
 
-# ---------- confidence interval statistics ----------
-
-
-def summarize_uncertainty_for_beta(beta: float, d: int, T: int, save_dir: str = "results_experiments", alpha: float = 0.01):
-    from plots_ts import load_runs 
-    runs = load_runs(beta, d, save_dir)
-    if runs is None:
-        raise FileNotFoundError(f"No saved runs for beta={beta}, d={d} in {save_dir}")
-    T_use = min(T, runs.shape[1])
-    runs = runs[:, :T_use]
-    ARME, RME_T = compute_cumreg_uncertainty_metrics(runs, alpha=alpha)
-    # Print as percentages for readability
-    print(f"β={beta}, d={d}, T={T_use}:  ARME={100*ARME:.2f}%   RME_T={100*RME_T:.2f}%")
-    return ARME, RME_T
-
 
 # ---------- convenience wrappers ----------
 
@@ -756,5 +718,5 @@ def run_plot_final_regret_vs_beta():
 if __name__ == "__main__":
     run_plot_final_regret_vs_beta_with_ci()
     run_plot_two_betas_with_ci()
-    run_plot_with_bounds_two_betas()
-    run_plot_final_regret_vs_beta()
+    #run_plot_with_bounds_two_betas()
+    #run_plot_final_regret_vs_beta()
