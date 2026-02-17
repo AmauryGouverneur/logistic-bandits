@@ -34,7 +34,7 @@ def run_logistic_bandits_TS_exp(
     T: int = 200,
     num_exp: int = 1024,
     batch_size: int = 256,
-    kappa: float = 8.0,
+    kappa: float = 6.0,
     mh_steps: int = 16,
     chains: Optional[int] = None,
     progress: bool = True,
@@ -61,6 +61,8 @@ def run_logistic_bandits_TS_exp(
     dtype = torch.float32
     use_cuda = dev.type == "cuda"
     N = chains if chains is not None else (256 if use_cuda else 32)
+
+    
 
     file_avg = os.path.join(save_dir, f"logistic_ts_avg_beta_{beta}_d_{d}.pt")
     file_all = os.path.join(save_dir, f"logistic_ts_all_beta_{beta}_d_{d}.pt")
@@ -121,8 +123,14 @@ def run_logistic_bandits_TS_exp(
                 Z = beta * torch.bmm(A_bt_d, Theta_bnd_local.transpose(1, 2))  # (B, t, N)
                 return (r_bt.unsqueeze(2) * Z - nn.functional.softplus(Z)).sum(dim=1)  # (B, N)
 
+
+        
             # MH update
-            Theta_bnd, _ = sampler.mh_step(Theta_bnd, logp_group, n_steps=mh_steps)
+            sampler.kappa = (
+                1.0 + 1.0 * beta**0.8 * (t + 1)**0.4
+            )
+
+            Theta_bnd, _ = sampler.mh_step(Theta_bnd, logp_group, n_steps=mh_steps, verbose=(t % 20 == 0))
 
             # --- Monte Carlo regret estimate ---
             dot_ijn = torch.einsum("bid,bjd->bij", Theta_bnd, Theta_bnd)  # (B,N,N)
@@ -167,13 +175,13 @@ def run_logistic_bandits_TS_exp(
 def sweep_betas(
     betas=None,
     d: int = 10,
-    T: int = 200,
-    num_exp: int = 1024,
+    T: int = 200, #200,
+    num_exp: int = 64, #1024,
     batch_size: int = 256,
     chains: int = 64,
     mh_steps: int = 16,
     progress: bool = True,
-    save_dir: str = "results_experiments",
+    save_dir: str = "results_experiments_adjusted_kappa",
     append: bool = False,
 ):
     """

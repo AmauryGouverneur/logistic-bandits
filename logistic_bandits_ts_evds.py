@@ -46,7 +46,7 @@ def run_logistic_bandits_TS_exp(
     mh_steps: int = 16,
     chains: Optional[int] = None,
     progress: bool = True,
-    save_dir: str = "results_experiments",
+    save_dir: str = "results_experiments_adjusted_kappa",
     seed: Optional[int] = 0,
     append: bool = False,   # append to existing *.pt if present
 
@@ -203,7 +203,10 @@ def run_logistic_bandits_TS_exp(
                 return (r_bt.unsqueeze(2) * Z - nn.functional.softplus(Z)).sum(dim=1)  # (B, N)
 
             # MH update
-            Theta_bnd, _ = sampler.mh_step(Theta_bnd, logp_group, n_steps=mh_steps)
+            sampler.kappa = (
+                1.0 + 1.0 * beta**0.8 * (t + 1)**0.4
+                )
+            Theta_bnd, _ = sampler.mh_step(Theta_bnd, logp_group, n_steps=mh_steps, verbose = False)
 
             # Optional posterior regret estimate each step (for diagnostics)
             if save_post_regret or (not use_true_regret):
@@ -556,12 +559,12 @@ def sweep_betas(
     betas=None,
     d: int = 10,
     T: int = 200,
-    num_exp: int = 1024,
+    num_exp: int = 64,
     batch_size: int = 256,
     chains: int = 64,
     mh_steps: int = 16,
     progress: bool = True,
-    save_dir: str = "results_experiments",
+    save_dir: str = "results_experiments_adjusted_kappa",
     append: bool = False,
     policy: str = "TS",
 ):
@@ -587,4 +590,6 @@ def sweep_betas(
 
 
 if __name__ == "__main__":
-    sweep_betas(policy="BAYESUCB")
+    sweep_betas(policy="EVDS")
+    sweep_betas(policy="IDS")
+    sweep_betas(policy="GLM_UCB")

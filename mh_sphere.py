@@ -95,7 +95,7 @@ class MHSphereSampler:
         flat_prop = self._vmf_sample_batch(flat)
         return flat_prop.reshape(B, K, d)
 
-    def mh_step(self, Theta_bkd, logp_fn_group, n_steps=12, use_amp=True):
+    def mh_step(self, Theta_bkd, logp_fn_group, n_steps=12, use_amp=True, verbose=False):
         """
         MH for grouped (B experiments) × (K chains).
         Theta_bkd:      (B, K, d) current states (will be normalized)
@@ -105,17 +105,31 @@ class MHSphereSampler:
         device, dtype = self.device, self.dtype
         autocast_ctx = torch.autocast("cuda", dtype=torch.bfloat16) if (use_amp and device.type == "cuda") else nullcontext()
 
+        total_accept = 0
+        total_proposals = 0
+
         with autocast_ctx:
             Theta = Theta_bkd.to(device, dtype)
             Theta = Theta / Theta.norm(dim=2, keepdim=True).clamp_min(1e-12)
             logp  = logp_fn_group(Theta)  # (B, K)
+
+            B, K, _ = Theta.shape
 
             for _ in range(n_steps):
                 prop = self._vmf_propose_bkd(Theta)      # (B, K, d)
                 logp_prop = logp_fn_group(prop)          # (B, K)
                 u = torch.rand_like(logp).log()
                 accept = u < (logp_prop - logp)
+
+                total_accept += accept.sum().item()
+                total_proposals += B * K
+
                 if accept.any():
                     Theta[accept] = prop[accept]
                     logp[accept]  = logp_prop[accept]
+
+        if verbose:
+            acc_rate = total_accept / max(1, total_proposals)
+            print(f"[MH] Acceptance rate: {acc_rate:.3f} - kappa:{self.kappa:.2f}")
+
         return Theta, logp

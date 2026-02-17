@@ -46,6 +46,7 @@ def load_runs(beta: float, d: int, method: str = "ts", save_dir: str = "results_
     """
     method = method.lower()
     # New naming convention from logistic_bandits_ts_evds.py
+    #path_new = os.path.join(save_dir, f"contextual_{method}_all_beta_{beta}_d_{d}.pt")
     path_new = os.path.join(save_dir, f"logistic_{method}_all_beta_{beta}_d_{d}.pt")
 
     # Backward compat: your old TS file naming (if you still have it)
@@ -279,8 +280,9 @@ def plot_cumulative_regret_two_betas_with_ci(
     methods = [
         ("ts",       PURPLE,    "TS"),
         ("evds",     STEELBLUE, "EVDS"),
-        ("ids_2p",  FORESTGRN, "IDS_2P"),
+        ("bayesucb",  FORESTGRN, "BAYESUCB"),
         ("ids",      BURGUNDY,  "IDS"),
+        ('glm_ucb', DARKORANGE, "GLM_UCB"),
     ]
 
 
@@ -387,8 +389,9 @@ def plot_final_cumulative_regret_vs_beta_with_ci(
     methods = [
         ("ts",       PURPLE,    "TS"),
         ("evds",     STEELBLUE, "EVDS"),
-        ("ids_2p",  FORESTGRN, "IDS_2P"),
+        ("bayesucb",  FORESTGRN, "BAYESUCB"),
         ("ids",      BURGUNDY,  "IDS"),
+        ('glm_ucb', DARKORANGE, "GLM_UCB"),
     ]
 
 
@@ -676,9 +679,9 @@ def run_plot_final_regret_vs_beta_with_ci():
     plot_final_cumulative_regret_vs_beta_with_ci(
         betas=np.r_[0.25:4.0+0.25:0.25,  4.5:10.0+0.5:0.5].tolist(),
         d=10, T=200,
-        save_dir="results_experiments",
+        save_dir="results_experiments_adjusted_kappa",
         figdir="figures",
-        fig_basename="regret_T200_vs_beta_with_ci",
+        fig_basename="adjusted_regret_T200_vs_beta_with_ci",
         alpha_ci=0.01,
         log_y=True,
     )
@@ -687,9 +690,9 @@ def run_plot_two_betas_with_ci():
     plot_cumulative_regret_two_betas_with_ci(
         d=10, T=200,
         beta_solid=2.0, beta_dashed=4.0,
-        save_dir="results_experiments",
+        save_dir="results_experiments_adjusted_kappa",
         figdir="figures",
-        fig_basename="regret_b2_b4_with_ci",
+        fig_basename="adjusted_regret_b2_b4_with_ci",
         alpha_ci=0.01,
         log_y=True,
     )
@@ -698,7 +701,7 @@ def run_plot_with_bounds_two_betas():
     plot_cumulative_regret_with_bounds_two_betas(
         d=10, T=200,
         beta1=2.0, beta2=4.0,
-        save_dir="results_experiments",
+        save_dir="results_experiments_adjusted_kappa",
         figdir="figures",
         fig_basename="regret_with_bounds_b2_b4",
         log_y=True,
@@ -708,7 +711,7 @@ def run_plot_final_regret_vs_beta():
     plot_final_regret_vs_beta_with_bounds(
         betas=np.r_[0.25:4.0+0.25:0.25,  4.5:10.0+0.5:0.5].tolist(),
         d=10, T=200,
-        save_dir="results_experiments",
+        save_dir="results_experiments_adjusted_kappa",
         figdir="figures",
         fig_basename="regret_T200_vs_beta_bounds",
         log_y=True,
